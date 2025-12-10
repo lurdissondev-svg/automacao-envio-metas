@@ -490,45 +490,30 @@ app.get('/api/instance/info', async (req, res) => {
 app.post('/api/instance/create', async (req, res) => {
   try {
     const { instanceName } = req.body;
+    const config = reloadConfig();
 
     if (!instanceName) {
       return res.status(400).json({ success: false, error: 'instanceName é obrigatório' });
     }
 
-    const baseUrl = process.env.UAZAPI_URL || '';
-    const adminToken = process.env.UAZAPI_ADMIN_TOKEN || '';
+    const baseUrl = config.uazapi.baseUrl;
+    const adminToken = config.uazapi.adminToken || '';
 
     if (!baseUrl || !adminToken) {
       return res.status(400).json({
         success: false,
-        error: 'UAZAPI_URL e UAZAPI_ADMIN_TOKEN devem estar configurados no .env',
+        error: 'baseUrl e adminToken devem estar configurados no config.yaml',
       });
     }
 
     const result = await createInstance(baseUrl, adminToken, instanceName);
 
-    // Atualizar .env com a nova instância
-    const envPath = path.resolve('.env');
-    let envContent = fs.readFileSync(envPath, 'utf-8');
-
-    // Atualizar ou adicionar UAZAPI_TOKEN e UAZAPI_INSTANCE_ID
-    if (envContent.includes('UAZAPI_TOKEN=')) {
-      envContent = envContent.replace(/UAZAPI_TOKEN=.*/, `UAZAPI_TOKEN=${result.token}`);
-    } else {
-      envContent += `\nUAZAPI_TOKEN=${result.token}`;
-    }
-
-    if (envContent.includes('UAZAPI_INSTANCE_ID=')) {
-      envContent = envContent.replace(/UAZAPI_INSTANCE_ID=.*/, `UAZAPI_INSTANCE_ID=${result.instance.id}`);
-    } else {
-      envContent += `\nUAZAPI_INSTANCE_ID=${result.instance.id}`;
-    }
-
-    fs.writeFileSync(envPath, envContent);
-
-    // Atualizar variáveis de ambiente em runtime
-    process.env.UAZAPI_TOKEN = result.token;
-    process.env.UAZAPI_INSTANCE_ID = result.instance.id;
+    // Atualizar config.yaml com a nova instância
+    const configContent = fs.readFileSync(configPath, 'utf-8');
+    let updatedConfig = configContent
+      .replace(/token:\s*.*/, `token: ${result.token}`)
+      .replace(/instanceId:\s*.*/, `instanceId: ${result.instance.id}`);
+    fs.writeFileSync(configPath, updatedConfig);
 
     // Resetar cliente UAZAPI para usar nova instância
     uazapiClient = null;
@@ -586,29 +571,28 @@ app.post('/api/whatsapp/logout', async (req, res) => {
 // DELETE /api/instance/delete - Deletar instância atual
 app.delete('/api/instance/delete', async (req, res) => {
   try {
-    const baseUrl = process.env.UAZAPI_URL || '';
-    const adminToken = process.env.UAZAPI_ADMIN_TOKEN || '';
-    const instanceId = process.env.UAZAPI_INSTANCE_ID || '';
+    const config = reloadConfig();
+    const baseUrl = config.uazapi.baseUrl;
+    const adminToken = config.uazapi.adminToken || '';
+    const instanceId = config.uazapi.instanceId;
 
     if (!baseUrl || !adminToken || !instanceId) {
       return res.status(400).json({
         success: false,
-        error: 'Configuração incompleta para deletar instância',
+        error: 'Configuração incompleta para deletar instância (verifique baseUrl, adminToken e instanceId no config.yaml)',
       });
     }
 
     await deleteInstanceByAdmin(baseUrl, adminToken, instanceId);
 
-    // Limpar .env
-    const envPath = path.resolve('.env');
-    let envContent = fs.readFileSync(envPath, 'utf-8');
-    envContent = envContent.replace(/UAZAPI_TOKEN=.*/, 'UAZAPI_TOKEN=');
-    envContent = envContent.replace(/UAZAPI_INSTANCE_ID=.*/, 'UAZAPI_INSTANCE_ID=');
-    fs.writeFileSync(envPath, envContent);
+    // Limpar config.yaml (remover token e instanceId)
+    const configContent = fs.readFileSync(configPath, 'utf-8');
+    const updatedConfig = configContent
+      .replace(/token:\s*.*/, 'token: ')
+      .replace(/instanceId:\s*.*/, 'instanceId: ');
+    fs.writeFileSync(configPath, updatedConfig);
 
-    // Limpar variáveis em runtime
-    process.env.UAZAPI_TOKEN = '';
-    process.env.UAZAPI_INSTANCE_ID = '';
+    // Resetar cliente
     uazapiClient = null;
 
     res.json({
