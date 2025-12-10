@@ -1,72 +1,72 @@
 # Tasks: Automação de Envio de Screenshots do Google Sheets para WhatsApp
 
 ## 1. Setup do Projeto
-- [ ] 1.1 Inicializar projeto Node.js com TypeScript
-- [ ] 1.2 Configurar ESLint e Prettier
-- [ ] 1.3 Criar estrutura de diretórios (src/, config/, docker/)
-- [ ] 1.4 Configurar tsconfig.json
-- [ ] 1.5 Adicionar dependências principais (playwright, node-cron, axios, yaml)
+- [x] 1.1 Inicializar projeto Node.js com TypeScript
+- [x] 1.2 Configurar ESLint e Prettier
+- [x] 1.3 Criar estrutura de diretórios (src/, config/, docker/)
+- [x] 1.4 Configurar tsconfig.json
+- [x] 1.5 Adicionar dependências principais (playwright, node-cron, axios, yaml)
 
 ## 2. Módulo de Configuração
-- [ ] 2.1 Criar schema de validação para config.yaml
-- [ ] 2.2 Implementar carregamento e parsing do arquivo de configuração
-- [ ] 2.3 Criar arquivo config.example.yaml com exemplos documentados
-- [ ] 2.4 Implementar validação de expressões cron
-- [ ] 2.5 Adicionar suporte a variáveis de ambiente (.env)
+- [x] 2.1 Criar schema de validação para config.yaml
+- [x] 2.2 Implementar carregamento e parsing do arquivo de configuração
+- [x] 2.3 Criar arquivo config.example.yaml com exemplos documentados
+- [x] 2.4 Implementar validação de expressões cron
+- [x] 2.5 Adicionar suporte a variáveis de ambiente (.env)
 
 ## 3. Módulo de Captura de Screenshots
-- [ ] 3.1 Implementar cliente Playwright com configurações otimizadas
-- [ ] 3.2 Criar função de navegação para Google Sheets
-- [ ] 3.3 Configurar auto-wait para carregamento completo da planilha
-- [ ] 3.4 Adicionar suporte a viewport configurável
-- [ ] 3.5 Implementar captura de região específica (seletor CSS ou locator)
-- [ ] 3.6 Adicionar tratamento de erros e timeout
+- [x] 3.1 Implementar cliente Playwright com configurações otimizadas
+- [x] 3.2 Criar função de navegação para Google Sheets
+- [x] 3.3 Configurar auto-wait para carregamento completo da planilha
+- [x] 3.4 Adicionar suporte a viewport configurável
+- [x] 3.5 Implementar captura de região específica (seletor CSS ou locator)
+- [x] 3.6 Adicionar tratamento de erros e timeout
 
 ## 4. Módulo de Integração com Evolution API v2
-- [ ] 4.1 Criar cliente HTTP para Evolution API
-- [ ] 4.2 Implementar verificação de conexão da instância
-- [ ] 4.3 Implementar envio de mídia (imagem) com caption
-- [ ] 4.4 Adicionar tratamento de erros da API
-- [ ] 4.5 Implementar rate limiting entre envios
-- [ ] 4.6 Criar tipagens TypeScript para a API
+- [x] 4.1 Criar cliente HTTP para Evolution API
+- [x] 4.2 Implementar verificação de conexão da instância
+- [x] 4.3 Implementar envio de mídia (imagem) com caption
+- [x] 4.4 Adicionar tratamento de erros da API
+- [x] 4.5 Implementar rate limiting entre envios
+- [x] 4.6 Criar tipagens TypeScript para a API
 
 ## 5. Módulo de Templates de Mensagem
-- [ ] 5.1 Implementar parser de templates com placeholders
-- [ ] 5.2 Criar funções para cada variável disponível (date, time, week, etc.)
-- [ ] 5.3 Adicionar suporte a formatação de data/hora em português
+- [x] 5.1 Implementar parser de templates com placeholders
+- [x] 5.2 Criar funções para cada variável disponível (date, time, week, etc.)
+- [x] 5.3 Adicionar suporte a formatação de data/hora em português
 
 ## 6. Módulo de Agendamento
-- [ ] 6.1 Implementar scheduler com node-cron
-- [ ] 6.2 Criar lógica de execução de jobs
-- [ ] 6.3 Implementar suporte a timezone
-- [ ] 6.4 Adicionar logs de próximas execuções
-- [ ] 6.5 Implementar graceful shutdown
+- [x] 6.1 Implementar scheduler com node-cron
+- [x] 6.2 Criar lógica de execução de jobs
+- [x] 6.3 Implementar suporte a timezone
+- [x] 6.4 Adicionar logs de próximas execuções
+- [x] 6.5 Implementar graceful shutdown
 
 ## 7. Módulo de Logging
-- [ ] 7.1 Configurar logger (winston ou pino)
-- [ ] 7.2 Implementar rotação de logs
-- [ ] 7.3 Adicionar níveis de log configuráveis
-- [ ] 7.4 Criar formato estruturado para logs
+- [x] 7.1 Configurar logger (winston ou pino)
+- [x] 7.2 Implementar rotação de logs
+- [x] 7.3 Adicionar níveis de log configuráveis
+- [x] 7.4 Criar formato estruturado para logs
 
 ## 8. Script Principal e Entry Point
-- [ ] 8.1 Criar index.ts com inicialização do sistema
-- [ ] 8.2 Implementar validação de pré-requisitos no startup
-- [ ] 8.3 Integrar todos os módulos
+- [x] 8.1 Criar index.ts com inicialização do sistema
+- [x] 8.2 Implementar validação de pré-requisitos no startup
+- [x] 8.3 Integrar todos os módulos
 - [ ] 8.4 Adicionar health check endpoint (opcional)
 
 ## 9. Docker e Deploy
-- [ ] 9.1 Criar Dockerfile leve (Node.js sem browser embutido)
-- [ ] 9.2 Criar serviço para integrar ao docker-compose existente da VPS
-- [ ] 9.3 Configurar montagem do Chrome do host no container
-- [ ] 9.4 Configurar volumes para persistência de configuração e logs
-- [ ] 9.5 Criar .env.example com variáveis necessárias (incluindo CHROME_PATH)
-- [ ] 9.6 Documentar processo de deploy e integração no README
+- [x] 9.1 Criar Dockerfile leve (Node.js sem browser embutido)
+- [x] 9.2 Criar serviço para integrar ao docker-compose existente da VPS
+- [x] 9.3 Configurar montagem do Chrome do host no container
+- [x] 9.4 Configurar volumes para persistência de configuração e logs
+- [x] 9.5 Criar .env.example com variáveis necessárias (incluindo CHROME_PATH)
+- [x] 9.6 Documentar processo de deploy e integração no README
 
 ## 10. Documentação
-- [ ] 10.1 Criar README.md com instruções de instalação
-- [ ] 10.2 Documentar formato do arquivo de configuração
-- [ ] 10.3 Adicionar exemplos de expressões cron comuns
-- [ ] 10.4 Criar guia de troubleshooting
+- [x] 10.1 Criar README.md com instruções de instalação
+- [x] 10.2 Documentar formato do arquivo de configuração
+- [x] 10.3 Adicionar exemplos de expressões cron comuns
+- [x] 10.4 Criar guia de troubleshooting
 
 ## 11. Testes e Validação
 - [ ] 11.1 Testar captura de screenshot localmente
