@@ -557,6 +557,32 @@ app.post('/api/instance/create', async (req, res) => {
   }
 });
 
+// POST /api/whatsapp/logout - Desconectar WhatsApp (permite conectar outro número)
+app.post('/api/whatsapp/logout', async (req, res) => {
+  try {
+    const client = getUazapiClient();
+    if (!client) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cliente UAZAPI não inicializado',
+      });
+    }
+
+    await client.logout();
+
+    res.json({
+      success: true,
+      message: 'WhatsApp desconectado com sucesso. Escaneie o QR Code para conectar outro número.',
+    });
+  } catch (error) {
+    logger.error('Erro ao fazer logout WhatsApp', { error });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao desconectar WhatsApp',
+    });
+  }
+});
+
 // DELETE /api/instance/delete - Deletar instância atual
 app.delete('/api/instance/delete', async (req, res) => {
   try {

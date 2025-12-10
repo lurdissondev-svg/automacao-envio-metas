@@ -454,7 +454,7 @@ export class UazapiClient {
   async logout(): Promise<void> {
     try {
       await this.request(
-        '/instance/logout',
+        '/instance/disconnect',
         'POST',
         { instance: this.instanceId }
       );
