@@ -4,6 +4,9 @@ import type {
   EvolutionConnectionState,
   EvolutionSendMediaPayload,
   EvolutionSendMediaResponse,
+  EvolutionQRCode,
+  EvolutionInstanceInfo,
+  WhatsAppGroup,
 } from './types.js';
 
 // Cliente para Evolution API v2
@@ -169,5 +172,92 @@ export class EvolutionClient {
     });
 
     return results;
+  }
+
+  // Obter QR Code para conexão
+  async getQRCode(): Promise<EvolutionQRCode> {
+    try {
+      const result = await this.request<EvolutionQRCode>(
+        `/instance/connect/${this.instanceName}`
+      );
+
+      logger.info('QR Code obtido', {
+        hasBase64: !!result.base64,
+        hasPairingCode: !!result.pairingCode,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Erro ao obter QR Code', {
+        error: error instanceof Error ? error.message : error,
+      });
+      throw error;
+    }
+  }
+
+  // Obter informações da instância
+  async getInstanceInfo(): Promise<EvolutionInstanceInfo> {
+    try {
+      const result = await this.request<{ instance: EvolutionInstanceInfo }>(
+        `/instance/fetchInstances?instanceName=${this.instanceName}`
+      );
+
+      return result.instance || { instanceName: this.instanceName };
+    } catch (error) {
+      logger.error('Erro ao obter info da instância', {
+        error: error instanceof Error ? error.message : error,
+      });
+      return { instanceName: this.instanceName };
+    }
+  }
+
+  // Listar todos os grupos do WhatsApp
+  async fetchAllGroups(): Promise<WhatsAppGroup[]> {
+    try {
+      const result = await this.request<WhatsAppGroup[]>(
+        `/group/fetchAllGroups/${this.instanceName}?getParticipants=false`
+      );
+
+      logger.info('Grupos obtidos', { count: result.length });
+
+      return result;
+    } catch (error) {
+      logger.error('Erro ao listar grupos', {
+        error: error instanceof Error ? error.message : error,
+      });
+      throw error;
+    }
+  }
+
+  // Desconectar instância (logout)
+  async logout(): Promise<void> {
+    try {
+      await this.request(
+        `/instance/logout/${this.instanceName}`,
+        'POST'
+      );
+      logger.info('Logout realizado');
+    } catch (error) {
+      logger.error('Erro ao fazer logout', {
+        error: error instanceof Error ? error.message : error,
+      });
+      throw error;
+    }
+  }
+
+  // Reiniciar instância
+  async restart(): Promise<void> {
+    try {
+      await this.request(
+        `/instance/restart/${this.instanceName}`,
+        'POST'
+      );
+      logger.info('Instância reiniciada');
+    } catch (error) {
+      logger.error('Erro ao reiniciar instância', {
+        error: error instanceof Error ? error.message : error,
+      });
+      throw error;
+    }
   }
 }

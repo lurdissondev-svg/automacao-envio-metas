@@ -1,0 +1,1999 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automação de Metas - WhatsApp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --whatsapp-green: #00a884;
+      --whatsapp-dark-green: #008069;
+      --whatsapp-light-green: #d9fdd3;
+      --whatsapp-bg: #111b21;
+      --whatsapp-sidebar: #202c33;
+      --whatsapp-chat: #0b141a;
+      --whatsapp-header: #202c33;
+      --whatsapp-input: #2a3942;
+      --whatsapp-border: #2a3942;
+      --whatsapp-text: #e9edef;
+      --whatsapp-text-secondary: #8696a0;
+      --whatsapp-bubble-out: #005c4b;
+      --whatsapp-bubble-in: #202c33;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--whatsapp-bg);
+      color: var(--whatsapp-text);
+      min-height: 100vh;
+    }
+
+    .app-container {
+      display: flex;
+      height: 100vh;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 400px;
+      background-color: var(--whatsapp-sidebar);
+      border-right: 1px solid var(--whatsapp-border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      background-color: var(--whatsapp-header);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-header h1::before {
+      content: '';
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      background: var(--whatsapp-green);
+      border-radius: 50%;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='white' viewBox='0 0 24 24'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'/%3E%3C/svg%3E");
+      background-size: 24px;
+      background-repeat: no-repeat;
+      background-position: center;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: transparent;
+      color: var(--whatsapp-text-secondary);
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .btn-icon:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .btn-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    /* Connection Status */
+    .connection-status {
+      padding: 12px 16px;
+      background: var(--whatsapp-input);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--whatsapp-border);
+    }
+
+    .connection-status:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .connection-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ff6b6b;
+    }
+
+    .connection-indicator.connected {
+      background: var(--whatsapp-green);
+    }
+
+    .connection-text {
+      flex: 1;
+    }
+
+    .connection-text strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .connection-text span {
+      font-size: 12px;
+      color: var(--whatsapp-text-secondary);
+    }
+
+    /* Schedule List */
+    .schedule-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .schedule-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--whatsapp-border);
+      transition: background 0.2s;
+    }
+
+    .schedule-item:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    .schedule-item.active {
+      background: var(--whatsapp-input);
+    }
+
+    .schedule-avatar {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: var(--whatsapp-green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 600;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+
+    .schedule-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .schedule-name {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .schedule-time {
+      font-size: 13px;
+      color: var(--whatsapp-text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .schedule-time svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--whatsapp-chat);
+    }
+
+    .main-header {
+      padding: 10px 16px;
+      background: var(--whatsapp-header);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--whatsapp-border);
+    }
+
+    .main-header-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .main-header-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--whatsapp-green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+    }
+
+    .main-header-text h2 {
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .main-header-text p {
+      font-size: 13px;
+      color: var(--whatsapp-text-secondary);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--whatsapp-border);
+      background: var(--whatsapp-header);
+    }
+
+    .tab {
+      padding: 12px 24px;
+      background: transparent;
+      border: none;
+      color: var(--whatsapp-text-secondary);
+      font-size: 14px;
+      cursor: pointer;
+      position: relative;
+      transition: color 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--whatsapp-text);
+    }
+
+    .tab.active {
+      color: var(--whatsapp-green);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--whatsapp-green);
+    }
+
+    /* Form Content */
+    .form-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .form-section {
+      background: var(--whatsapp-sidebar);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .form-section-title {
+      font-size: 14px;
+      color: var(--whatsapp-green);
+      font-weight: 600;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      color: var(--whatsapp-text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--whatsapp-input);
+      border: 1px solid var(--whatsapp-border);
+      border-radius: 8px;
+      color: var(--whatsapp-text);
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--whatsapp-green);
+    }
+
+    .form-input::placeholder {
+      color: var(--whatsapp-text-secondary);
+    }
+
+    textarea.form-input {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    /* Time Picker */
+    .time-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .time-picker select {
+      padding: 12px 16px;
+      background: var(--whatsapp-input);
+      border: 1px solid var(--whatsapp-border);
+      border-radius: 8px;
+      color: var(--whatsapp-text);
+      font-size: 15px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .time-picker select:focus {
+      border-color: var(--whatsapp-green);
+    }
+
+    .time-separator {
+      font-size: 20px;
+      font-weight: bold;
+      color: var(--whatsapp-text-secondary);
+    }
+
+    /* Days Selector */
+    .days-selector {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .day-btn {
+      width: 44px;
+      height: 44px;
+      border: 2px solid var(--whatsapp-border);
+      background: transparent;
+      border-radius: 50%;
+      color: var(--whatsapp-text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .day-btn:hover {
+      border-color: var(--whatsapp-green);
+      color: var(--whatsapp-green);
+    }
+
+    .day-btn.active {
+      background: var(--whatsapp-green);
+      border-color: var(--whatsapp-green);
+      color: white;
+    }
+
+    /* Groups List */
+    .groups-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .group-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: var(--whatsapp-input);
+      border-radius: 8px;
+    }
+
+    .group-item .group-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .group-item .group-name {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .group-item .group-id {
+      font-size: 12px;
+      color: var(--whatsapp-text-secondary);
+    }
+
+    .group-item .group-tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .group-item .group-tab select {
+      padding: 6px 10px;
+      background: var(--whatsapp-sidebar);
+      border: 1px solid var(--whatsapp-border);
+      border-radius: 6px;
+      color: var(--whatsapp-text);
+      font-size: 13px;
+    }
+
+    .group-item input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--whatsapp-text);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .group-item .btn-remove {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: rgba(255,0,0,0.2);
+      color: #ff6b6b;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-add-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: transparent;
+      border: 2px dashed var(--whatsapp-border);
+      border-radius: 8px;
+      color: var(--whatsapp-text-secondary);
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-add-group:hover {
+      border-color: var(--whatsapp-green);
+      color: var(--whatsapp-green);
+    }
+
+    /* Buttons */
+    .form-actions {
+      padding: 16px 20px;
+      background: var(--whatsapp-header);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--whatsapp-green);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--whatsapp-dark-green);
+    }
+
+    .btn-secondary {
+      background: var(--whatsapp-input);
+      color: var(--whatsapp-text);
+    }
+
+    .btn-secondary:hover {
+      background: var(--whatsapp-border);
+    }
+
+    .btn-danger {
+      background: rgba(255,0,0,0.2);
+      color: #ff6b6b;
+    }
+
+    .btn-danger:hover {
+      background: rgba(255,0,0,0.3);
+    }
+
+    /* Empty State */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .empty-state svg {
+      width: 80px;
+      height: 80px;
+      color: var(--whatsapp-text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .empty-state h3 {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      color: var(--whatsapp-text-secondary);
+      margin-bottom: 20px;
+    }
+
+    /* QR Code Container */
+    .qr-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      text-align: center;
+    }
+
+    .qr-code {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 20px 0;
+    }
+
+    .qr-code img {
+      width: 256px;
+      height: 256px;
+    }
+
+    .qr-instructions {
+      color: var(--whatsapp-text-secondary);
+      max-width: 400px;
+      line-height: 1.6;
+    }
+
+    .pairing-code {
+      font-size: 24px;
+      font-weight: bold;
+      letter-spacing: 4px;
+      color: var(--whatsapp-green);
+      margin: 20px 0;
+      padding: 15px 30px;
+      background: var(--whatsapp-input);
+      border-radius: 8px;
+    }
+
+    /* Groups Selector Modal */
+    .groups-selector {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .group-selector-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .group-selector-item:hover {
+      background: var(--whatsapp-input);
+    }
+
+    .group-selector-item.selected {
+      background: rgba(0,168,132,0.2);
+    }
+
+    .group-selector-item input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--whatsapp-green);
+    }
+
+    .group-selector-info {
+      flex: 1;
+    }
+
+    .group-selector-name {
+      font-weight: 500;
+    }
+
+    .group-selector-members {
+      font-size: 12px;
+      color: var(--whatsapp-text-secondary);
+    }
+
+    /* Status Badge */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-badge.running {
+      background: rgba(0,168,132,0.2);
+      color: var(--whatsapp-green);
+    }
+
+    .status-badge.stopped {
+      background: rgba(255,107,107,0.2);
+      color: #ff6b6b;
+    }
+
+    .status-badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal {
+      background: var(--whatsapp-sidebar);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow: hidden;
+      transform: scale(0.9);
+      transition: transform 0.3s;
+    }
+
+    .modal-overlay.active .modal {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--whatsapp-border);
+    }
+
+    .modal-header h3 {
+      font-size: 18px;
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      max-height: 60vh;
+    }
+
+    .modal-footer {
+      padding: 16px 20px;
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      border-top: 1px solid var(--whatsapp-border);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 16px 24px;
+      background: var(--whatsapp-sidebar);
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 1001;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.success {
+      border-left: 4px solid var(--whatsapp-green);
+    }
+
+    .toast.error {
+      border-left: 4px solid #ff6b6b;
+    }
+
+    /* Loading spinner */
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--whatsapp-border);
+      border-top-color: var(--whatsapp-green);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 100%;
+        position: absolute;
+        z-index: 100;
+        transform: translateX(0);
+      }
+
+      .sidebar.hidden {
+        transform: translateX(-100%);
+      }
+
+      .main-content {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h1>Metas</h1>
+        <div class="header-actions">
+          <button class="btn-icon" onclick="toggleScheduler()" id="schedulerToggle" title="Iniciar/Parar Scheduler">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </button>
+          <button class="btn-icon" onclick="showNewSchedule()" title="Novo Agendamento">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Connection Status -->
+      <div class="connection-status" onclick="showWhatsAppPanel()" id="connectionStatus">
+        <div class="connection-indicator" id="connectionIndicator"></div>
+        <div class="connection-text">
+          <strong id="connectionTitle">WhatsApp Desconectado</strong>
+          <span id="connectionSubtitle">Clique para conectar</span>
+        </div>
+      </div>
+
+      <div class="schedule-list" id="scheduleList">
+        <!-- Lista de schedules sera renderizada aqui -->
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" id="mainContent">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+        </svg>
+        <h3>Automacao de Metas</h3>
+        <p>Selecione um agendamento ou crie um novo para comecar</p>
+        <button class="btn btn-primary" onclick="showNewSchedule()">
+          Criar Agendamento
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Test/Preview Modal -->
+  <div class="modal-overlay" id="testModal">
+    <div class="modal" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3>Teste de Envio</h3>
+      </div>
+      <div class="modal-body" id="testModalBody">
+        <div style="text-align: center; padding: 40px;">
+          <div class="spinner" style="margin: 0 auto 16px;"></div>
+          <p>Gerando preview...</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeTestModal()">Fechar</button>
+        <button class="btn btn-primary" id="btnSendTest" onclick="sendTest()" style="display: none;">
+          Enviar para Grupo de Teste
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Confirmar Exclusao</h3>
+      </div>
+      <div class="modal-body">
+        <p>Tem certeza que deseja excluir este agendamento?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancelar</button>
+        <button class="btn btn-danger" onclick="confirmDelete()">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Groups Selection Modal -->
+  <div class="modal-overlay" id="groupsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Selecionar Grupos</h3>
+      </div>
+      <div class="modal-body">
+        <div class="groups-selector" id="groupsSelector">
+          <div style="text-align: center; padding: 40px;">
+            <div class="spinner" style="margin: 0 auto 16px;"></div>
+            <p>Carregando grupos...</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeGroupsModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmGroupsSelection()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Estado da aplicacao
+    let schedules = [];
+    let selectedSchedule = null;
+    let schedulerRunning = false;
+    let deleteScheduleId = null;
+    let whatsappConnected = false;
+    let availableGroups = [];
+    let selectedGroups = [];
+    let currentView = 'schedule'; // 'schedule' ou 'whatsapp'
+
+    // Dias da semana
+    const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+
+    // Carregar schedules
+    async function loadSchedules() {
+      try {
+        const response = await fetch('/api/schedules');
+        const data = await response.json();
+        if (data.success) {
+          schedules = data.data;
+          renderScheduleList();
+        }
+      } catch (error) {
+        showToast('Erro ao carregar agendamentos', 'error');
+      }
+    }
+
+    // Verificar status do scheduler
+    async function checkSchedulerStatus() {
+      try {
+        const response = await fetch('/api/status');
+        const data = await response.json();
+        if (data.success) {
+          schedulerRunning = data.data.scheduler.isRunning;
+          updateSchedulerButton();
+        }
+      } catch (error) {
+        console.error('Erro ao verificar status:', error);
+      }
+    }
+
+    // Verificar conexao WhatsApp
+    async function checkWhatsAppStatus() {
+      try {
+        const response = await fetch('/api/whatsapp/status');
+        const data = await response.json();
+        if (data.success) {
+          whatsappConnected = data.data.connected;
+          updateConnectionStatus(data.data);
+        }
+      } catch (error) {
+        updateConnectionStatus({ connected: false, error: 'Erro de conexao' });
+      }
+    }
+
+    // Atualizar status de conexao na UI
+    function updateConnectionStatus(data) {
+      const indicator = document.getElementById('connectionIndicator');
+      const title = document.getElementById('connectionTitle');
+      const subtitle = document.getElementById('connectionSubtitle');
+
+      if (data.connected) {
+        indicator.classList.add('connected');
+        title.textContent = 'WhatsApp Conectado';
+        subtitle.textContent = data.instance?.profileName || 'Pronto para enviar';
+      } else {
+        indicator.classList.remove('connected');
+        title.textContent = 'WhatsApp Desconectado';
+        subtitle.textContent = 'Clique para conectar';
+      }
+    }
+
+    // Renderizar lista de schedules
+    function renderScheduleList() {
+      const list = document.getElementById('scheduleList');
+
+      if (schedules.length === 0) {
+        list.innerHTML = `
+          <div style="padding: 40px; text-align: center; color: var(--whatsapp-text-secondary);">
+            <p>Nenhum agendamento</p>
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = schedules.map(schedule => {
+        const initial = schedule.name.charAt(0).toUpperCase();
+        const cronParts = schedule.cron.split(' ');
+        const time = `${cronParts[1].padStart(2, '0')}:${cronParts[0].padStart(2, '0')}`;
+
+        return `
+          <div class="schedule-item ${selectedSchedule?.id === schedule.id ? 'active' : ''}"
+               onclick="selectSchedule('${schedule.id}')">
+            <div class="schedule-avatar">${initial}</div>
+            <div class="schedule-info">
+              <div class="schedule-name">${schedule.name}</div>
+              <div class="schedule-time">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                </svg>
+                ${time} - ${schedule.groups.length} grupo(s)
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Mostrar painel do WhatsApp
+    async function showWhatsAppPanel() {
+      currentView = 'whatsapp';
+      const main = document.getElementById('mainContent');
+
+      main.innerHTML = `
+        <div class="main-header">
+          <div class="main-header-info">
+            <div class="main-header-avatar" style="background: #25D366;">
+              <svg viewBox="0 0 24 24" fill="white" width="24" height="24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+            </div>
+            <div class="main-header-text">
+              <h2>Conexao WhatsApp</h2>
+              <p id="whatsappStatus">Verificando...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="qr-container" id="qrContainer">
+          <div class="spinner"></div>
+          <p style="margin-top: 16px;">Carregando...</p>
+        </div>
+      `;
+
+      await loadQRCode();
+    }
+
+    // Carregar QR Code
+    async function loadQRCode() {
+      try {
+        const response = await fetch('/api/whatsapp/qrcode');
+        const data = await response.json();
+        const container = document.getElementById('qrContainer');
+        const status = document.getElementById('whatsappStatus');
+
+        if (data.success && data.data.connected) {
+          status.textContent = 'Conectado';
+          container.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="var(--whatsapp-green)" width="80" height="80">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            <h3 style="margin-top: 20px; color: var(--whatsapp-green);">WhatsApp Conectado!</h3>
+            <p class="qr-instructions" style="margin-top: 12px;">
+              Sua instancia esta pronta para enviar mensagens.
+            </p>
+            <button class="btn btn-danger" style="margin-top: 20px;" onclick="disconnectWhatsApp()">
+              Desconectar
+            </button>
+          `;
+          checkWhatsAppStatus();
+        } else if (data.success && data.data.qrCode) {
+          status.textContent = 'Aguardando escaneamento';
+          container.innerHTML = `
+            <div class="qr-code">
+              <img src="${data.data.qrCode}" alt="QR Code">
+            </div>
+            ${data.data.pairingCode ? `
+              <p style="color: var(--whatsapp-text-secondary); margin-bottom: 8px;">Ou use o codigo de pareamento:</p>
+              <div class="pairing-code">${data.data.pairingCode}</div>
+            ` : ''}
+            <p class="qr-instructions">
+              Abra o WhatsApp no seu celular, va em <strong>Dispositivos conectados</strong>
+              e escaneie este QR Code para conectar.
+            </p>
+            <button class="btn btn-secondary" style="margin-top: 20px;" onclick="loadQRCode()">
+              Atualizar QR Code
+            </button>
+          `;
+          // Auto-refresh QR Code a cada 30 segundos
+          setTimeout(() => {
+            if (currentView === 'whatsapp') {
+              checkWhatsAppStatus();
+              loadQRCode();
+            }
+          }, 30000);
+        } else {
+          status.textContent = 'Erro na conexao';
+          container.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="#ff6b6b" width="60" height="60">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+            <h3 style="margin-top: 20px; color: #ff6b6b;">Erro ao conectar</h3>
+            <p class="qr-instructions" style="margin-top: 12px;">
+              ${data.error || 'Verifique se a Evolution API esta rodando e tente novamente.'}
+            </p>
+            <button class="btn btn-primary" style="margin-top: 20px;" onclick="loadQRCode()">
+              Tentar Novamente
+            </button>
+          `;
+        }
+      } catch (error) {
+        const container = document.getElementById('qrContainer');
+        container.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="#ff6b6b" width="60" height="60">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+          </svg>
+          <h3 style="margin-top: 20px; color: #ff6b6b;">Erro de conexao</h3>
+          <p class="qr-instructions" style="margin-top: 12px;">
+            Nao foi possivel conectar ao servidor. Verifique se a Evolution API esta ativa.
+          </p>
+          <button class="btn btn-primary" style="margin-top: 20px;" onclick="loadQRCode()">
+            Tentar Novamente
+          </button>
+        `;
+      }
+    }
+
+    // Desconectar WhatsApp
+    async function disconnectWhatsApp() {
+      try {
+        const response = await fetch('/api/whatsapp/logout', { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+          showToast('WhatsApp desconectado', 'success');
+          checkWhatsAppStatus();
+          loadQRCode();
+        }
+      } catch (error) {
+        showToast('Erro ao desconectar', 'error');
+      }
+    }
+
+    // Selecionar schedule
+    async function selectSchedule(id) {
+      currentView = 'schedule';
+      try {
+        const response = await fetch(`/api/schedules/${id}`);
+        const data = await response.json();
+        if (data.success) {
+          selectedSchedule = data.data;
+          renderScheduleForm();
+          renderScheduleList();
+        }
+      } catch (error) {
+        showToast('Erro ao carregar agendamento', 'error');
+      }
+    }
+
+    // Mostrar formulario de novo schedule
+    function showNewSchedule() {
+      currentView = 'schedule';
+      selectedSchedule = {
+        id: null,
+        name: '',
+        sheetUrl: '',
+        groups: [],
+        cron: '0 9 * * 1-5',
+        messageTemplate: '📊 *{scheduleName}* - {date}\n\nAtualizacao das {time}',
+        sheetTabs: [],
+        cronParsed: {
+          hours: '9',
+          minutes: '0',
+          days: [1, 2, 3, 4, 5]
+        }
+      };
+      renderScheduleForm();
+      renderScheduleList();
+    }
+
+    // Renderizar formulario
+    function renderScheduleForm() {
+      const main = document.getElementById('mainContent');
+      const schedule = selectedSchedule;
+      const isNew = !schedule.id;
+
+      // Parse cron se necessario
+      if (!schedule.cronParsed) {
+        const parts = schedule.cron.split(' ');
+        schedule.cronParsed = {
+          minutes: parts[0],
+          hours: parts[1],
+          days: parseCronDays(parts[4])
+        };
+      }
+
+      main.innerHTML = `
+        <div class="main-header">
+          <div class="main-header-info">
+            <div class="main-header-avatar">${schedule.name ? schedule.name.charAt(0).toUpperCase() : '+'}</div>
+            <div class="main-header-text">
+              <h2>${isNew ? 'Novo Agendamento' : schedule.name}</h2>
+              <p>${isNew ? 'Configure os detalhes abaixo' : 'Editar agendamento'}</p>
+            </div>
+          </div>
+          ${!isNew ? `
+            <div class="header-actions">
+              <button class="btn-icon" onclick="runScheduleNow('${schedule.id}')" title="Executar Agora">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </button>
+              <button class="btn-icon" onclick="showDeleteModal('${schedule.id}')" title="Excluir" style="color: #ff6b6b;">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+              </button>
+            </div>
+          ` : ''}
+        </div>
+
+        <div class="form-container">
+          <div class="form-section">
+            <div class="form-section-title">Informacoes Basicas</div>
+
+            <div class="form-group">
+              <label class="form-label">Nome do Agendamento</label>
+              <input type="text" class="form-input" id="scheduleName"
+                     placeholder="Ex: Metas Diarias - Vendas"
+                     value="${schedule.name || ''}">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Link da Planilha (Google Sheets)</label>
+              <input type="text" class="form-input" id="sheetUrl"
+                     placeholder="https://docs.google.com/spreadsheets/d/..."
+                     value="${schedule.sheetUrl || ''}">
+              <p style="font-size: 12px; color: var(--whatsapp-text-secondary); margin-top: 8px;">
+                Cole o link completo da planilha do Google Sheets
+              </p>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-title">Horario</div>
+
+            <div class="form-group">
+              <label class="form-label">Hora do Envio</label>
+              <div class="time-picker">
+                <select id="scheduleHour">
+                  ${Array.from({length: 24}, (_, i) =>
+                    `<option value="${i}" ${parseInt(schedule.cronParsed.hours) === i ? 'selected' : ''}>
+                      ${i.toString().padStart(2, '0')}
+                    </option>`
+                  ).join('')}
+                </select>
+                <span class="time-separator">:</span>
+                <select id="scheduleMinute">
+                  ${Array.from({length: 60}, (_, i) =>
+                    `<option value="${i}" ${parseInt(schedule.cronParsed.minutes) === i ? 'selected' : ''}>
+                      ${i.toString().padStart(2, '0')}
+                    </option>`
+                  ).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Dias da Semana</label>
+              <div class="days-selector">
+                ${DAYS.map((day, i) => `
+                  <button type="button" class="day-btn ${schedule.cronParsed.days.includes(i) ? 'active' : ''}"
+                          onclick="toggleDay(${i}, this)">
+                    ${day}
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-title">Grupos do WhatsApp</div>
+            <p style="font-size: 13px; color: var(--whatsapp-text-secondary); margin-bottom: 16px;">
+              Selecione os grupos que receberao o screenshot. Para cada grupo, voce pode especificar qual aba da planilha sera capturada.
+            </p>
+
+            <div class="groups-list" id="groupsList">
+              ${renderGroupsWithTabs(schedule)}
+            </div>
+
+            <button class="btn-add-group" onclick="openGroupsSelector()" style="margin-top: 12px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+              ${whatsappConnected ? 'Selecionar Grupos do WhatsApp' : 'Adicionar Grupo Manualmente'}
+            </button>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-title">Variaveis da Planilha</div>
+            <p style="font-size: 13px; color: var(--whatsapp-text-secondary); margin-bottom: 16px;">
+              Configure quais celulas da planilha serao usadas como variaveis na mensagem. Ex: celula B2 vira a variavel {valorDia}
+            </p>
+
+            <div class="cell-mappings-list" id="cellMappingsList">
+              ${renderCellMappings(schedule)}
+            </div>
+
+            <button class="btn-add-group" onclick="addCellMapping()" style="margin-top: 12px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+              Adicionar Variavel
+            </button>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-title">Mensagem</div>
+
+            <div class="form-group">
+              <label class="form-label">Template da Mensagem</label>
+              <textarea class="form-input" id="messageTemplate"
+                        placeholder="Use variaveis: {date}, {time}, {weekday}, {scheduleName}, {valorDia}...">${schedule.messageTemplate || ''}</textarea>
+              <p style="font-size: 12px; color: var(--whatsapp-text-secondary); margin-top: 8px;">
+                Variaveis padrao: {date}, {time}, {datetime}, {week}, {weekday}, {scheduleName}<br>
+                <span id="customVarsHint"></span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-secondary" onclick="cancelEdit()">Cancelar</button>
+          <button class="btn" style="background: #ff9800; color: white;" onclick="openTestModal()">
+            Testar Preview
+          </button>
+          <button class="btn btn-primary" onclick="saveSchedule()">
+            ${isNew ? 'Criar Agendamento' : 'Salvar Alteracoes'}
+          </button>
+        </div>
+      `;
+    }
+
+    // Renderizar grupos com configuracao de abas
+    function renderGroupsWithTabs(schedule) {
+      if (!schedule.groups || schedule.groups.length === 0) {
+        return `
+          <div style="padding: 20px; text-align: center; color: var(--whatsapp-text-secondary); background: var(--whatsapp-input); border-radius: 8px;">
+            <p>Nenhum grupo selecionado</p>
+          </div>
+        `;
+      }
+
+      return schedule.groups.map((groupId, index) => {
+        // Encontrar configuracao de aba para este grupo
+        const tabConfig = schedule.sheetTabs?.find(t => t.groupId === groupId);
+        const groupName = tabConfig?.groupName || availableGroups.find(g => g.id === groupId)?.name || '';
+
+        return `
+          <div class="group-item" data-group-id="${groupId}">
+            <div class="group-info">
+              <div class="group-name">${groupName || 'Grupo ' + (index + 1)}</div>
+              <div class="group-id">${groupId}</div>
+            </div>
+            <div class="group-tab">
+              <label style="font-size: 12px; color: var(--whatsapp-text-secondary);">Aba:</label>
+              <input type="text" class="form-input" style="width: 120px; padding: 6px 10px; font-size: 13px;"
+                     placeholder="Nome ou gid"
+                     value="${tabConfig?.tabName || ''}"
+                     onchange="updateGroupTab('${groupId}', this.value)">
+            </div>
+            <button class="btn-remove" onclick="removeGroup(${index})">x</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Atualizar configuracao de aba do grupo
+    function updateGroupTab(groupId, tabName) {
+      if (!selectedSchedule.sheetTabs) {
+        selectedSchedule.sheetTabs = [];
+      }
+
+      const existing = selectedSchedule.sheetTabs.find(t => t.groupId === groupId);
+      if (existing) {
+        existing.tabName = tabName;
+      } else {
+        const group = availableGroups.find(g => g.id === groupId);
+        selectedSchedule.sheetTabs.push({
+          groupId,
+          groupName: group?.name || '',
+          tabName
+        });
+      }
+    }
+
+    // Renderizar mapeamento de celulas
+    function renderCellMappings(schedule) {
+      if (!schedule.cellMappings || schedule.cellMappings.length === 0) {
+        return `
+          <div style="padding: 20px; text-align: center; color: var(--whatsapp-text-secondary); background: var(--whatsapp-input); border-radius: 8px;">
+            <p>Nenhuma variavel configurada</p>
+            <p style="font-size: 12px; margin-top: 8px;">Adicione variaveis para usar valores da planilha na mensagem</p>
+          </div>
+        `;
+      }
+
+      return schedule.cellMappings.map((mapping, index) => `
+        <div class="group-item" style="margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+            <div style="flex: 1;">
+              <label style="font-size: 11px; color: var(--whatsapp-text-secondary);">Nome da variavel</label>
+              <input type="text" class="form-input" style="padding: 8px 12px; font-size: 13px;"
+                     placeholder="Ex: valorDia"
+                     value="${mapping.variable}"
+                     onchange="updateCellMapping(${index}, 'variable', this.value)">
+            </div>
+            <div style="width: 100px;">
+              <label style="font-size: 11px; color: var(--whatsapp-text-secondary);">Celula</label>
+              <input type="text" class="form-input" style="padding: 8px 12px; font-size: 13px;"
+                     placeholder="Ex: B2"
+                     value="${mapping.cell}"
+                     onchange="updateCellMapping(${index}, 'cell', this.value)">
+            </div>
+          </div>
+          <button class="btn-remove" onclick="removeCellMapping(${index})">x</button>
+        </div>
+      `).join('');
+    }
+
+    // Adicionar mapeamento de celula
+    function addCellMapping() {
+      if (!selectedSchedule.cellMappings) {
+        selectedSchedule.cellMappings = [];
+      }
+      selectedSchedule.cellMappings.push({ variable: '', cell: '' });
+      document.getElementById('cellMappingsList').innerHTML = renderCellMappings(selectedSchedule);
+      updateCustomVarsHint();
+    }
+
+    // Atualizar mapeamento de celula
+    function updateCellMapping(index, field, value) {
+      if (selectedSchedule.cellMappings && selectedSchedule.cellMappings[index]) {
+        selectedSchedule.cellMappings[index][field] = value;
+        updateCustomVarsHint();
+      }
+    }
+
+    // Remover mapeamento de celula
+    function removeCellMapping(index) {
+      if (selectedSchedule.cellMappings) {
+        selectedSchedule.cellMappings.splice(index, 1);
+        document.getElementById('cellMappingsList').innerHTML = renderCellMappings(selectedSchedule);
+        updateCustomVarsHint();
+      }
+    }
+
+    // Atualizar hint de variaveis customizadas
+    function updateCustomVarsHint() {
+      const hint = document.getElementById('customVarsHint');
+      if (hint && selectedSchedule.cellMappings && selectedSchedule.cellMappings.length > 0) {
+        const vars = selectedSchedule.cellMappings
+          .filter(m => m.variable)
+          .map(m => `{${m.variable}}`)
+          .join(', ');
+        if (vars) {
+          hint.innerHTML = `<strong>Suas variaveis:</strong> ${vars}`;
+        }
+      }
+    }
+
+    // Abrir modal de teste
+    let testPreviewData = null;
+
+    async function openTestModal() {
+      const sheetUrl = document.getElementById('sheetUrl')?.value || selectedSchedule.sheetUrl;
+      const messageTemplate = document.getElementById('messageTemplate')?.value || selectedSchedule.messageTemplate;
+
+      if (!sheetUrl) {
+        showToast('Configure o link da planilha primeiro', 'error');
+        return;
+      }
+
+      document.getElementById('testModal').classList.add('active');
+      document.getElementById('testModalBody').innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+          <div class="spinner" style="margin: 0 auto 16px;"></div>
+          <p>Gerando preview...</p>
+          <p style="font-size: 12px; color: var(--whatsapp-text-secondary); margin-top: 8px;">
+            Capturando screenshot e buscando dados da planilha...
+          </p>
+        </div>
+      `;
+
+      try {
+        // Coletar dados do formulario atual
+        const cellMappings = selectedSchedule.cellMappings || [];
+
+        const response = await fetch('/api/test/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sheetUrl,
+            messageTemplate,
+            cellMappings,
+            scheduleName: document.getElementById('scheduleName')?.value || selectedSchedule.name || 'Teste'
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          testPreviewData = data.data;
+          document.getElementById('btnSendTest').style.display = 'inline-block';
+          document.getElementById('testModalBody').innerHTML = `
+            <div style="margin-bottom: 20px;">
+              <h4 style="margin-bottom: 12px; color: var(--whatsapp-green);">Screenshot da Planilha</h4>
+              <div style="background: var(--whatsapp-input); border-radius: 8px; padding: 12px; text-align: center;">
+                <img src="${data.data.screenshot}" style="max-width: 100%; border-radius: 4px; border: 1px solid var(--whatsapp-border);">
+              </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+              <h4 style="margin-bottom: 12px; color: var(--whatsapp-green);">Mensagem que sera enviada</h4>
+              <div style="background: var(--whatsapp-bubble-out); padding: 12px 16px; border-radius: 8px; white-space: pre-wrap; line-height: 1.5;">
+                ${escapeHtml(data.data.message)}
+              </div>
+            </div>
+
+            ${data.data.sheetError ? `
+              <div style="margin-bottom: 20px; background: rgba(255, 152, 0, 0.2); border: 1px solid #ff9800; border-radius: 8px; padding: 12px;">
+                <h4 style="margin-bottom: 8px; color: #ff9800; display: flex; align-items: center; gap: 8px;">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                  </svg>
+                  Aviso sobre a planilha
+                </h4>
+                <p style="font-size: 13px; color: var(--whatsapp-text);">${escapeHtml(data.data.sheetError)}</p>
+              </div>
+            ` : ''}
+
+            ${data.data.variables && Object.keys(data.data.variables).length > 0 ? `
+              <div>
+                <h4 style="margin-bottom: 12px; color: var(--whatsapp-green);">Variaveis extraidas</h4>
+                <div style="background: var(--whatsapp-input); padding: 12px; border-radius: 8px;">
+                  <table style="width: 100%; font-size: 13px;">
+                    ${Object.entries(data.data.variables).map(([key, value]) => `
+                      <tr>
+                        <td style="padding: 4px 8px; color: var(--whatsapp-text-secondary);">{${key}}</td>
+                        <td style="padding: 4px 8px;">${escapeHtml(String(value))}</td>
+                      </tr>
+                    `).join('')}
+                  </table>
+                </div>
+              </div>
+            ` : ''}
+
+            ${selectedSchedule.groups && selectedSchedule.groups.length > 0 ? `
+              <div style="margin-top: 20px;">
+                <h4 style="margin-bottom: 12px; color: var(--whatsapp-green);">Enviar teste para</h4>
+                <select id="testGroupSelect" class="form-input">
+                  ${selectedSchedule.groups.map((g, i) => {
+                    const groupInfo = selectedSchedule.sheetTabs?.find(t => t.groupId === g);
+                    const name = groupInfo?.groupName || availableGroups.find(ag => ag.id === g)?.name || g;
+                    return `<option value="${g}">${name}</option>`;
+                  }).join('')}
+                </select>
+              </div>
+            ` : ''}
+          `;
+        } else {
+          document.getElementById('testModalBody').innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #ff6b6b;">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" style="margin-bottom: 16px;">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+              </svg>
+              <h3>Erro ao gerar preview</h3>
+              <p style="margin-top: 12px;">${data.error || 'Erro desconhecido'}</p>
+            </div>
+          `;
+        }
+      } catch (error) {
+        document.getElementById('testModalBody').innerHTML = `
+          <div style="text-align: center; padding: 40px; color: #ff6b6b;">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48" style="margin-bottom: 16px;">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+            </svg>
+            <h3>Erro de conexao</h3>
+            <p style="margin-top: 12px;">Nao foi possivel conectar ao servidor</p>
+          </div>
+        `;
+      }
+    }
+
+    // Fechar modal de teste
+    function closeTestModal() {
+      document.getElementById('testModal').classList.remove('active');
+      document.getElementById('btnSendTest').style.display = 'none';
+      testPreviewData = null;
+    }
+
+    // Enviar teste
+    async function sendTest() {
+      if (!testPreviewData) {
+        showToast('Gere o preview primeiro', 'error');
+        return;
+      }
+
+      const groupSelect = document.getElementById('testGroupSelect');
+      if (!groupSelect) {
+        showToast('Selecione um grupo', 'error');
+        return;
+      }
+
+      const groupId = groupSelect.value;
+      document.getElementById('btnSendTest').disabled = true;
+      document.getElementById('btnSendTest').textContent = 'Enviando...';
+
+      try {
+        const response = await fetch('/api/test/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            groupId,
+            screenshot: testPreviewData.screenshot,
+            message: testPreviewData.message
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          showToast('Teste enviado com sucesso!', 'success');
+          closeTestModal();
+        } else {
+          showToast(data.error || 'Erro ao enviar teste', 'error');
+        }
+      } catch (error) {
+        showToast('Erro ao enviar teste', 'error');
+      } finally {
+        document.getElementById('btnSendTest').disabled = false;
+        document.getElementById('btnSendTest').textContent = 'Enviar para Grupo de Teste';
+      }
+    }
+
+    // Escapar HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Abrir seletor de grupos
+    async function openGroupsSelector() {
+      if (!whatsappConnected) {
+        // Adicionar grupo manualmente
+        const groupId = prompt('Digite o ID do grupo (ex: 5511999999999@g.us):');
+        if (groupId) {
+          if (!selectedSchedule.groups) {
+            selectedSchedule.groups = [];
+          }
+          if (!selectedSchedule.groups.includes(groupId)) {
+            selectedSchedule.groups.push(groupId);
+            renderScheduleForm();
+          }
+        }
+        return;
+      }
+
+      document.getElementById('groupsModal').classList.add('active');
+      selectedGroups = [...(selectedSchedule.groups || [])];
+
+      try {
+        const response = await fetch('/api/whatsapp/groups');
+        const data = await response.json();
+
+        if (data.success) {
+          availableGroups = data.data;
+          renderGroupsSelector();
+        } else {
+          document.getElementById('groupsSelector').innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #ff6b6b;">
+              <p>${data.error || 'Erro ao carregar grupos'}</p>
+            </div>
+          `;
+        }
+      } catch (error) {
+        document.getElementById('groupsSelector').innerHTML = `
+          <div style="text-align: center; padding: 40px; color: #ff6b6b;">
+            <p>Erro ao carregar grupos</p>
+          </div>
+        `;
+      }
+    }
+
+    // Renderizar seletor de grupos
+    function renderGroupsSelector() {
+      const container = document.getElementById('groupsSelector');
+
+      if (availableGroups.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; padding: 40px; color: var(--whatsapp-text-secondary);">
+            <p>Nenhum grupo encontrado</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = availableGroups.map(group => `
+        <div class="group-selector-item ${selectedGroups.includes(group.id) ? 'selected' : ''}"
+             onclick="toggleGroupSelection('${group.id}')">
+          <input type="checkbox" ${selectedGroups.includes(group.id) ? 'checked' : ''}>
+          <div class="group-selector-info">
+            <div class="group-selector-name">${group.name}</div>
+            <div class="group-selector-members">${group.size || 0} participantes</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Toggle selecao de grupo
+    function toggleGroupSelection(groupId) {
+      const index = selectedGroups.indexOf(groupId);
+      if (index > -1) {
+        selectedGroups.splice(index, 1);
+      } else {
+        selectedGroups.push(groupId);
+      }
+      renderGroupsSelector();
+    }
+
+    // Confirmar selecao de grupos
+    function confirmGroupsSelection() {
+      selectedSchedule.groups = [...selectedGroups];
+
+      // Atualizar sheetTabs com nomes dos grupos
+      if (!selectedSchedule.sheetTabs) {
+        selectedSchedule.sheetTabs = [];
+      }
+
+      selectedGroups.forEach(groupId => {
+        if (!selectedSchedule.sheetTabs.find(t => t.groupId === groupId)) {
+          const group = availableGroups.find(g => g.id === groupId);
+          selectedSchedule.sheetTabs.push({
+            groupId,
+            groupName: group?.name || '',
+            tabName: ''
+          });
+        }
+      });
+
+      // Remover tabs de grupos nao selecionados
+      selectedSchedule.sheetTabs = selectedSchedule.sheetTabs.filter(
+        t => selectedGroups.includes(t.groupId)
+      );
+
+      closeGroupsModal();
+      renderScheduleForm();
+    }
+
+    // Fechar modal de grupos
+    function closeGroupsModal() {
+      document.getElementById('groupsModal').classList.remove('active');
+    }
+
+    // Parse dias do cron
+    function parseCronDays(dayStr) {
+      if (dayStr === '*') return [0, 1, 2, 3, 4, 5, 6];
+      if (dayStr.includes('-')) {
+        const [start, end] = dayStr.split('-').map(Number);
+        const days = [];
+        for (let i = start; i <= end; i++) days.push(i);
+        return days;
+      }
+      if (dayStr.includes(',')) {
+        return dayStr.split(',').map(Number);
+      }
+      return [parseInt(dayStr)];
+    }
+
+    // Toggle dia selecionado
+    function toggleDay(day, btn) {
+      btn.classList.toggle('active');
+    }
+
+    // Remover grupo
+    function removeGroup(index) {
+      const groupId = selectedSchedule.groups[index];
+      selectedSchedule.groups.splice(index, 1);
+
+      // Remover configuracao de aba tambem
+      if (selectedSchedule.sheetTabs) {
+        selectedSchedule.sheetTabs = selectedSchedule.sheetTabs.filter(
+          t => t.groupId !== groupId
+        );
+      }
+
+      renderScheduleForm();
+    }
+
+    // Salvar schedule
+    async function saveSchedule() {
+      const name = document.getElementById('scheduleName').value;
+      const sheetUrl = document.getElementById('sheetUrl').value;
+      const hours = document.getElementById('scheduleHour').value;
+      const minutes = document.getElementById('scheduleMinute').value;
+      const messageTemplate = document.getElementById('messageTemplate').value;
+
+      // Coletar dias selecionados
+      const dayBtns = document.querySelectorAll('.day-btn.active');
+      const days = Array.from(dayBtns).map(btn =>
+        DAYS.indexOf(btn.textContent.trim())
+      );
+
+      // Validacao
+      if (!name || !sheetUrl || selectedSchedule.groups.length === 0 || days.length === 0) {
+        showToast('Preencha todos os campos obrigatorios', 'error');
+        return;
+      }
+
+      const payload = {
+        name,
+        sheetUrl,
+        groups: selectedSchedule.groups,
+        hours,
+        minutes,
+        days,
+        messageTemplate,
+        sheetTabs: selectedSchedule.sheetTabs || [],
+        cellMappings: (selectedSchedule.cellMappings || []).filter(m => m.variable && m.cell)
+      };
+
+      try {
+        const isNew = !selectedSchedule.id;
+        const url = isNew ? '/api/schedules' : `/api/schedules/${selectedSchedule.id}`;
+        const method = isNew ? 'POST' : 'PUT';
+
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          showToast(isNew ? 'Agendamento criado!' : 'Agendamento atualizado!', 'success');
+          await loadSchedules();
+          if (isNew) {
+            selectedSchedule = data.data;
+          }
+          selectSchedule(data.data.id);
+        } else {
+          showToast(data.error || 'Erro ao salvar', 'error');
+        }
+      } catch (error) {
+        showToast('Erro ao salvar agendamento', 'error');
+      }
+    }
+
+    // Cancelar edicao
+    function cancelEdit() {
+      selectedSchedule = null;
+      document.getElementById('mainContent').innerHTML = `
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+          </svg>
+          <h3>Automacao de Metas</h3>
+          <p>Selecione um agendamento ou crie um novo para comecar</p>
+          <button class="btn btn-primary" onclick="showNewSchedule()">
+            Criar Agendamento
+          </button>
+        </div>
+      `;
+      renderScheduleList();
+    }
+
+    // Executar agora
+    async function runScheduleNow(id) {
+      try {
+        const response = await fetch(`/api/schedules/${id}/run`, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+          showToast('Execucao iniciada!', 'success');
+        } else {
+          showToast(data.error || 'Erro ao executar', 'error');
+        }
+      } catch (error) {
+        showToast('Erro ao executar agendamento', 'error');
+      }
+    }
+
+    // Modal de exclusao
+    function showDeleteModal(id) {
+      deleteScheduleId = id;
+      document.getElementById('deleteModal').classList.add('active');
+    }
+
+    function closeDeleteModal() {
+      deleteScheduleId = null;
+      document.getElementById('deleteModal').classList.remove('active');
+    }
+
+    async function confirmDelete() {
+      if (!deleteScheduleId) return;
+
+      try {
+        const response = await fetch(`/api/schedules/${deleteScheduleId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+          showToast('Agendamento excluido!', 'success');
+          closeDeleteModal();
+          selectedSchedule = null;
+          await loadSchedules();
+          cancelEdit();
+        } else {
+          showToast(data.error || 'Erro ao excluir', 'error');
+        }
+      } catch (error) {
+        showToast('Erro ao excluir agendamento', 'error');
+      }
+    }
+
+    // Toggle Scheduler
+    async function toggleScheduler() {
+      try {
+        const endpoint = schedulerRunning ? '/api/scheduler/stop' : '/api/scheduler/start';
+        const response = await fetch(endpoint, { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+          schedulerRunning = !schedulerRunning;
+          updateSchedulerButton();
+          showToast(schedulerRunning ? 'Scheduler iniciado!' : 'Scheduler parado!', 'success');
+        }
+      } catch (error) {
+        showToast('Erro ao alterar scheduler', 'error');
+      }
+    }
+
+    function updateSchedulerButton() {
+      const btn = document.getElementById('schedulerToggle');
+      if (schedulerRunning) {
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 6h12v12H6z"/>
+          </svg>
+        `;
+        btn.style.color = 'var(--whatsapp-green)';
+        btn.title = 'Parar Scheduler';
+      } else {
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        `;
+        btn.style.color = '';
+        btn.title = 'Iniciar Scheduler';
+      }
+    }
+
+    // Toast notification
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast ${type} show`;
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    // Inicializacao
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSchedules();
+      checkSchedulerStatus();
+      checkWhatsAppStatus();
+      // Verificar status periodicamente
+      setInterval(checkSchedulerStatus, 10000);
+      setInterval(checkWhatsAppStatus, 15000);
+    });
+  </script>
+</body>
+</html>

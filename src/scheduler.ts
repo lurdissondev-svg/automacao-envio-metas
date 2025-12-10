@@ -1,9 +1,10 @@
 import cron from 'node-cron';
 import { logger } from './logger.js';
-import type { ScheduleConfig, AppConfig } from './types.js';
-import { initBrowser, closeBrowser, captureScreenshotWithRetry } from './screenshot.js';
-import { EvolutionClient } from './evolution.js';
-import { createMessage } from './templates.js';
+import type { ScheduleConfig, AppConfig, SheetTabConfig } from './types.js';
+import { initBrowser, closeBrowser, captureScreenshotWithRetry, captureScreenshotsParallel } from './screenshot.js';
+import { UazapiClient } from './uazapi.js';
+import { createMessageWithSheetData } from './templates.js';
+import { buildSheetUrlWithTab } from './sheets.js';
 
 interface ScheduledTask {
   name: string;
@@ -14,13 +15,16 @@ interface ScheduledTask {
 // Gerenciador de agendamentos
 export class Scheduler {
   private tasks: ScheduledTask[] = [];
-  private evolutionClient: EvolutionClient;
+  private uazapiClient: UazapiClient;
   private appConfig: AppConfig;
   private isRunning: boolean = false;
 
   constructor(config: AppConfig) {
     this.appConfig = config;
-    this.evolutionClient = new EvolutionClient(config.evolution);
+    if (!config.uazapi) {
+      throw new Error('Configuração UAZAPI não encontrada');
+    }
+    this.uazapiClient = new UazapiClient(config.uazapi);
   }
 
   // Executar um schedule individual
@@ -30,7 +34,7 @@ export class Scheduler {
 
     try {
       // Verificar conexão com WhatsApp
-      const connected = await this.evolutionClient.isConnected();
+      const connected = await this.uazapiClient.isConnected();
       if (!connected) {
         throw new Error('WhatsApp não conectado');
       }
@@ -38,32 +42,125 @@ export class Scheduler {
       // Inicializar browser se necessário
       await initBrowser(this.appConfig.browser);
 
-      // Capturar screenshot
-      const screenshot = await captureScreenshotWithRetry(
-        schedule.sheetUrl,
-        schedule.viewport || this.appConfig.browser.defaultViewport,
-        schedule.selector,
-        schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad
-      );
+      let successful = 0;
+      let failed = 0;
 
-      // Criar mensagem
-      const message = createMessage(
-        schedule.messageTemplate,
-        schedule.name,
-        this.appConfig.settings.timezone
-      );
+      // Verificar se há configuração de abas por grupo
+      const hasTabConfigs = schedule.sheetTabs && schedule.sheetTabs.length > 0;
 
-      // Enviar para grupos
-      const results = await this.evolutionClient.sendImageToGroups(
-        schedule.groups,
-        screenshot,
-        message,
-        this.appConfig.settings.delayBetweenGroups
-      );
+      if (hasTabConfigs) {
+        // Modo: screenshot específico por grupo/aba (com captura paralela)
+        logger.info(`Processando ${schedule.groups.length} grupos com abas específicas (modo paralelo)`);
 
-      // Contar resultados
-      const successful = [...results.values()].filter(r => !(r instanceof Error)).length;
-      const failed = schedule.groups.length - successful;
+        // Preparar tarefas para captura paralela
+        const captureTasks: { url: string; id: string; tabConfig?: SheetTabConfig }[] = [];
+
+        for (const groupId of schedule.groups) {
+          const tabConfig = schedule.sheetTabs?.find(t => t.groupId === groupId);
+          const tabIdentifier = tabConfig?.tabGid || tabConfig?.tabName;
+          const sheetUrlForGroup = buildSheetUrlWithTab(schedule.sheetUrl, tabIdentifier);
+
+          captureTasks.push({
+            url: sheetUrlForGroup,
+            id: groupId,
+            tabConfig,
+          });
+        }
+
+        // Capturar screenshots em paralelo
+        logger.info(`Capturando ${captureTasks.length} screenshots em paralelo...`);
+        const screenshotResults = await captureScreenshotsParallel(
+          captureTasks,
+          schedule.viewport || this.appConfig.browser.defaultViewport,
+          schedule.selector,
+          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad
+        );
+
+        // Enviar imagens para cada grupo
+        for (const result of screenshotResults) {
+          const groupId = result.id;
+          const task = captureTasks.find(t => t.id === groupId);
+
+          if (result.error) {
+            failed++;
+            logger.error(`Erro ao capturar screenshot para grupo ${groupId}`, {
+              error: result.error,
+            });
+            continue;
+          }
+
+          try {
+            const sheetUrlForGroup = task?.url || schedule.sheetUrl;
+
+            // Criar mensagem com dados da planilha
+            const message = await createMessageWithSheetData(
+              schedule.messageTemplate,
+              schedule.name,
+              this.appConfig.settings.timezone,
+              sheetUrlForGroup,
+              schedule.cellMappings
+            );
+
+            // Enviar para este grupo
+            const sendResult = await this.uazapiClient.sendImage(groupId, result.screenshot!, message);
+
+            if (sendResult && !(sendResult instanceof Error)) {
+              successful++;
+              logger.debug(`Enviado com sucesso para grupo ${groupId}`);
+            } else {
+              failed++;
+              logger.warn(`Falha ao enviar para grupo ${groupId}`, { error: sendResult });
+            }
+
+            // Delay entre envios
+            const index = screenshotResults.indexOf(result);
+            if (index < screenshotResults.length - 1) {
+              await new Promise(resolve =>
+                setTimeout(resolve, this.appConfig.settings.delayBetweenGroups)
+              );
+            }
+
+          } catch (groupError) {
+            failed++;
+            logger.error(`Erro ao processar grupo ${groupId}`, {
+              error: groupError instanceof Error ? groupError.message : groupError,
+            });
+          }
+        }
+
+      } else {
+        // Modo tradicional: um screenshot para todos os grupos
+        logger.info('Modo tradicional: screenshot único para todos os grupos');
+
+        // Capturar screenshot
+        const screenshot = await captureScreenshotWithRetry(
+          schedule.sheetUrl,
+          schedule.viewport || this.appConfig.browser.defaultViewport,
+          schedule.selector,
+          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad
+        );
+
+        // Criar mensagem com dados da planilha
+        const message = await createMessageWithSheetData(
+          schedule.messageTemplate,
+          schedule.name,
+          this.appConfig.settings.timezone,
+          schedule.sheetUrl,
+          schedule.cellMappings
+        );
+
+        // Enviar para grupos
+        const results = await this.uazapiClient.sendImageToGroups(
+          schedule.groups,
+          screenshot,
+          message,
+          this.appConfig.settings.delayBetweenGroups
+        );
+
+        // Contar resultados
+        successful = [...results.values()].filter(r => !(r instanceof Error)).length;
+        failed = schedule.groups.length - successful;
+      }
 
       const duration = Date.now() - startTime;
       logger.info(`Schedule ${schedule.name} concluído`, {
@@ -122,7 +219,7 @@ export class Scheduler {
 
     // Verificar conexão inicial
     try {
-      const connected = await this.evolutionClient.isConnected();
+      const connected = await this.uazapiClient.isConnected();
       if (!connected) {
         logger.warn('WhatsApp não conectado. Os schedules serão iniciados, mas verificarão a conexão antes de cada execução.');
       } else {

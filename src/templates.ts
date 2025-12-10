@@ -1,10 +1,12 @@
 import { logger } from './logger.js';
-import type { TemplateVariables } from './types.js';
+import type { TemplateVariables, CellMapping } from './types.js';
+import { fetchSheetData } from './sheets.js';
 
 // Criar variáveis de template baseadas na data/hora atual
 export function createTemplateVariables(
   scheduleName: string,
-  timezone: string = 'America/Sao_Paulo'
+  timezone: string = 'America/Sao_Paulo',
+  sheetData?: Record<string, string>
 ): TemplateVariables {
   const now = new Date();
 
@@ -31,7 +33,8 @@ export function createTemplateVariables(
   const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
   const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
 
-  return {
+  // Variáveis base
+  const variables: TemplateVariables = {
     date: dateFormatter.format(now),
     time: timeFormatter.format(now),
     datetime: `${dateFormatter.format(now)} ${timeFormatter.format(now)}`,
@@ -39,6 +42,41 @@ export function createTemplateVariables(
     weekday: weekdayFormatter.format(now),
     scheduleName,
   };
+
+  // Adicionar variáveis da planilha
+  if (sheetData) {
+    for (const [key, value] of Object.entries(sheetData)) {
+      variables[key] = value;
+    }
+  }
+
+  return variables;
+}
+
+// Buscar dados da planilha e criar variáveis
+export async function createTemplateVariablesWithSheetData(
+  scheduleName: string,
+  timezone: string = 'America/Sao_Paulo',
+  sheetUrl?: string,
+  cellMappings?: CellMapping[]
+): Promise<TemplateVariables> {
+  let sheetData: Record<string, string> = {};
+
+  if (sheetUrl && cellMappings && cellMappings.length > 0) {
+    try {
+      sheetData = await fetchSheetData(sheetUrl, cellMappings);
+      logger.info('Dados da planilha obtidos', {
+        variables: Object.keys(sheetData),
+        values: sheetData
+      });
+    } catch (error) {
+      logger.error('Erro ao buscar dados da planilha', {
+        error: error instanceof Error ? error.message : error
+      });
+    }
+  }
+
+  return createTemplateVariables(scheduleName, timezone, sheetData);
 }
 
 // Processar template substituindo variáveis
@@ -63,16 +101,42 @@ export function processTemplate(
   return result;
 }
 
-// Criar mensagem final a partir do template e schedule
+// Criar mensagem final a partir do template e schedule (síncrono, sem dados da planilha)
 export function createMessage(
   messageTemplate: string,
   scheduleName: string,
-  timezone: string = 'America/Sao_Paulo'
+  timezone: string = 'America/Sao_Paulo',
+  sheetData?: Record<string, string>
 ): string {
-  const variables = createTemplateVariables(scheduleName, timezone);
+  const variables = createTemplateVariables(scheduleName, timezone, sheetData);
   const message = processTemplate(messageTemplate, variables);
 
   logger.debug('Mensagem criada', {
+    scheduleName,
+    messageLength: message.length,
+    variables
+  });
+
+  return message;
+}
+
+// Criar mensagem com dados da planilha (assíncrono)
+export async function createMessageWithSheetData(
+  messageTemplate: string,
+  scheduleName: string,
+  timezone: string = 'America/Sao_Paulo',
+  sheetUrl?: string,
+  cellMappings?: CellMapping[]
+): Promise<string> {
+  const variables = await createTemplateVariablesWithSheetData(
+    scheduleName,
+    timezone,
+    sheetUrl,
+    cellMappings
+  );
+  const message = processTemplate(messageTemplate, variables);
+
+  logger.debug('Mensagem criada com dados da planilha', {
     scheduleName,
     messageLength: message.length,
     variables

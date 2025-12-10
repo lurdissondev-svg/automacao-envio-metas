@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import YAML from 'yaml';
 import { logger } from './logger.js';
-import type { AppConfig, ScheduleConfig, SettingsConfig, BrowserConfig, EvolutionConfig } from './types.js';
+import type { AppConfig, ScheduleConfig, SettingsConfig, BrowserConfig, UazapiConfig } from './types.js';
 
 // Valores padrão
 const defaultSettings: SettingsConfig = {
@@ -138,15 +138,16 @@ export function loadConfig(configPath?: string): AppConfig {
   // Processar variáveis de ambiente
   const config = processEnvVars(rawConfig) as Partial<AppConfig>;
 
-  // Validar evolution config
-  const evolution: EvolutionConfig = {
-    baseUrl: config.evolution?.baseUrl || process.env.EVOLUTION_API_URL || '',
-    apiKey: config.evolution?.apiKey || process.env.EVOLUTION_API_KEY || '',
-    instanceName: config.evolution?.instanceName || process.env.EVOLUTION_INSTANCE || '',
+  // Validar UAZAPI config
+  const uazapi: UazapiConfig = {
+    baseUrl: config.uazapi?.baseUrl || process.env.UAZAPI_URL || '',
+    token: config.uazapi?.token || process.env.UAZAPI_TOKEN || '',
+    instanceId: config.uazapi?.instanceId || process.env.UAZAPI_INSTANCE_ID || '',
+    adminToken: config.uazapi?.adminToken || process.env.UAZAPI_ADMIN_TOKEN,
   };
 
-  if (!evolution.baseUrl || !evolution.apiKey || !evolution.instanceName) {
-    throw new Error('Configuração da Evolution API incompleta. Verifique baseUrl, apiKey e instanceName.');
+  if (!uazapi.baseUrl || !uazapi.token || !uazapi.instanceId) {
+    throw new Error('Configuração da UAZAPI incompleta. Verifique baseUrl, token e instanceId.');
   }
 
   // Mesclar settings com padrões
@@ -189,7 +190,7 @@ export function loadConfig(configPath?: string): AppConfig {
   logger.info(`Configuração carregada: ${validSchedules.length} schedules válidos`);
 
   return {
-    evolution,
+    uazapi,
     settings,
     browser,
     schedules: validSchedules,
