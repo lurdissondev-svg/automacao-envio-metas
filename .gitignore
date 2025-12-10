@@ -1,0 +1,38 @@
+# Dependências
+node_modules/
+
+# Build
+dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Configuração local (contém secrets)
+.env
+config/config.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporários
+tmp/
+temp/
+*.tmp
+
+# Screenshots temporários
+screenshots/
+*.png
+*.jpg
+
+# Cache
+.cache/
+.npm/

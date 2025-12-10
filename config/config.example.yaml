@@ -1,0 +1,124 @@
+# ===========================================
+# Configuração de Agendamentos
+# ===========================================
+# Copie este arquivo para config.yaml e ajuste conforme necessário
+
+# Configurações da Evolution API
+# (pode usar variáveis de ambiente com ${VAR})
+evolution:
+  baseUrl: "${EVOLUTION_API_URL}"
+  apiKey: "${EVOLUTION_API_KEY}"
+  instanceName: "${EVOLUTION_INSTANCE}"
+
+# Configurações gerais
+settings:
+  # Timezone para os agendamentos
+  timezone: "America/Sao_Paulo"
+
+  # Delay entre mensagens para o mesmo grupo (ms)
+  delayBetweenMessages: 3000
+
+  # Delay entre grupos diferentes (ms)
+  delayBetweenGroups: 5000
+
+  # Timeout para carregamento da página (ms)
+  pageTimeout: 30000
+
+  # Tempo extra de espera após carregar (ms)
+  waitAfterLoad: 2000
+
+# Configurações do browser
+browser:
+  # Headless mode (sempre true em produção)
+  headless: true
+
+  # Viewport padrão
+  defaultViewport:
+    width: 1920
+    height: 1080
+
+# Lista de agendamentos
+schedules:
+  # -----------------------------------------
+  # Exemplo 1: Metas diárias de vendas
+  # -----------------------------------------
+  - name: "Metas Diárias - Vendas"
+    # URL da planilha Google Sheets (deve estar pública ou acessível)
+    sheetUrl: "https://docs.google.com/spreadsheets/d/SEU_SPREADSHEET_ID/edit#gid=0"
+
+    # Lista de grupos do WhatsApp (formato: numero@g.us)
+    # Para obter o ID: Evolution API GET /group/fetchAllGroups/{instance}
+    groups:
+      - "5511999999999@g.us"
+      - "5511888888888@g.us"
+
+    # Expressão cron: minuto hora dia mês dia-semana
+    # Este exemplo: 9h de segunda a sexta
+    cron: "0 9 * * 1-5"
+
+    # Viewport específico para este agendamento (opcional)
+    viewport:
+      width: 1920
+      height: 1080
+
+    # Seletor CSS para capturar região específica (opcional)
+    # Se não informado, captura a página inteira
+    # selector: ".grid-container"
+
+    # Template da mensagem
+    # Variáveis disponíveis: {{date}}, {{time}}, {{datetime}}, {{week}}, {{weekday}}, {{scheduleName}}
+    messageTemplate: |
+      📊 *Atualização de Metas - {{date}}*
+
+      Segue o relatório diário de vendas.
+
+      Bom dia a todos! 🚀
+
+  # -----------------------------------------
+  # Exemplo 2: Resumo semanal
+  # -----------------------------------------
+  - name: "Resumo Semanal"
+    sheetUrl: "https://docs.google.com/spreadsheets/d/OUTRO_SPREADSHEET_ID/edit#gid=0"
+    groups:
+      - "5511777777777@g.us"
+    # Toda segunda-feira às 8h
+    cron: "0 8 * * 1"
+    messageTemplate: |
+      📈 *Resumo Semanal - Semana {{week}}*
+
+      Confira nosso desempenho da semana!
+
+      {{weekday}}, {{date}}
+
+  # -----------------------------------------
+  # Exemplo 3: Múltiplos envios por dia
+  # -----------------------------------------
+  # - name: "Atualização Manhã e Tarde"
+  #   sheetUrl: "https://docs.google.com/spreadsheets/d/ID/edit"
+  #   groups:
+  #     - "5511666666666@g.us"
+  #   # 9h e 15h de segunda a sexta
+  #   cron: "0 9,15 * * 1-5"
+  #   messageTemplate: |
+  #     ⏰ Atualização das {{time}}
+  #
+  #     Confira os números atualizados!
+
+# ===========================================
+# Referência de Expressões Cron
+# ===========================================
+# ┌───────────── minuto (0 - 59)
+# │ ┌───────────── hora (0 - 23)
+# │ │ ┌───────────── dia do mês (1 - 31)
+# │ │ │ ┌───────────── mês (1 - 12)
+# │ │ │ │ ┌───────────── dia da semana (0 - 6) (Domingo = 0)
+# │ │ │ │ │
+# * * * * *
+#
+# Exemplos:
+# "0 9 * * 1-5"     = 9h de segunda a sexta
+# "0 8 * * 1"       = 8h toda segunda
+# "0 18 * * *"      = 18h todos os dias
+# "0 9,14,18 * * *" = 9h, 14h e 18h todos os dias
+# "*/30 * * * *"    = A cada 30 minutos
+# "0 */2 * * *"     = A cada 2 horas (hora cheia)

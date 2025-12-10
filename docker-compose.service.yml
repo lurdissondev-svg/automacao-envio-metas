@@ -1,0 +1,80 @@
+# ===========================================
+# Snippet para adicionar ao seu docker-compose.yml existente
+# ===========================================
+# Copie este serviço para o seu docker-compose.yml principal
+# e ajuste os paths conforme necessário.
+
+services:
+  sheets-whatsapp:
+    # Build local - ajuste o path para onde está o projeto
+    build:
+      context: ./automacao-envio-metas
+      dockerfile: Dockerfile
+
+    container_name: sheets-whatsapp-automation
+
+    restart: unless-stopped
+
+    environment:
+      # Chrome - path dentro do container (mapeado do host)
+      - CHROME_PATH=/usr/bin/google-chrome
+
+      # Evolution API - use o nome do serviço se estiver no mesmo compose
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution-api:8080}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE}
+
+      # Timezone
+      - TZ=America/Sao_Paulo
+
+      # Log level
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+
+    volumes:
+      # =========================================
+      # CHROME DO HOST
+      # =========================================
+      # Ajuste estes paths conforme sua VPS:
+      # - Verifique: which google-chrome
+      # - Pode ser: /usr/bin/google-chrome-stable ou /usr/bin/chromium-browser
+
+      # Binário do Chrome
+      - /usr/bin/google-chrome:/usr/bin/google-chrome:ro
+      # Alternativas (descomente se necessário):
+      # - /usr/bin/google-chrome-stable:/usr/bin/google-chrome-stable:ro
+      # - /usr/bin/chromium-browser:/usr/bin/chromium-browser:ro
+
+      # Bibliotecas necessárias do host
+      - /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu:ro
+
+      # Fontes (para renderização correta)
+      - /usr/share/fonts:/usr/share/fonts:ro
+
+      # =========================================
+      # CONFIGURAÇÃO E LOGS
+      # =========================================
+      # Ajuste o path base conforme onde clonou o projeto
+      - ./automacao-envio-metas/config:/app/config
+      - ./automacao-envio-metas/logs:/app/logs
+
+    # Conecta à mesma rede dos outros serviços
+    networks:
+      - default
+
+    # Dependências (ajuste conforme seu setup)
+    depends_on:
+      - evolution-api  # Remova se Evolution API estiver externa
+
+    # Opcional: recursos limitados
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 512M
+    #     reservations:
+    #       memory: 256M
+
+    # Opcional: para resolver problemas de permissão do Chrome
+    # security_opt:
+    #   - seccomp:unconfined
+    # cap_add:
+    #   - SYS_ADMIN

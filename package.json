@@ -1,0 +1,44 @@
+{
+  "name": "automacao-envio-metas",
+  "version": "1.0.0",
+  "description": "Automação de envio de screenshots do Google Sheets para WhatsApp via Evolution API v2",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "format": "prettier --write src/"
+  },
+  "keywords": [
+    "whatsapp",
+    "google-sheets",
+    "automation",
+    "evolution-api",
+    "playwright",
+    "screenshot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.40.0",
+    "yaml": "^2.3.4",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.3.0",
+    "tsx": "^4.6.0",
+    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "prettier": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
