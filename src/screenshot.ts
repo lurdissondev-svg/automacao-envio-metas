@@ -341,14 +341,15 @@ export async function captureScreenshotWithRetry(
   viewport: ViewportConfig,
   selector?: string,
   waitAfterLoad: number = 2000,
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  clip?: ClipConfig
 ): Promise<Buffer> {
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       logger.info(`Tentativa ${attempt}/${maxRetries} de captura`);
-      return await captureScreenshot(url, viewport, selector, waitAfterLoad);
+      return await captureScreenshot(url, viewport, selector, waitAfterLoad, clip);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       logger.warn(`Tentativa ${attempt} falhou`, { error: lastError.message });
@@ -381,7 +382,8 @@ export async function captureScreenshotsParallel(
   tasks: ParallelCaptureTask[],
   viewport: ViewportConfig,
   selector?: string,
-  waitAfterLoad: number = 2000
+  waitAfterLoad: number = 2000,
+  clip?: ClipConfig
 ): Promise<ParallelCaptureResult[]> {
   if (!browser) {
     throw new Error('Browser não inicializado. Chame initBrowser() primeiro.');
@@ -398,7 +400,7 @@ export async function captureScreenshotsParallel(
 
     const batchPromises = batch.map(async (task) => {
       try {
-        const screenshot = await captureScreenshot(task.url, viewport, selector, waitAfterLoad);
+        const screenshot = await captureScreenshot(task.url, viewport, selector, waitAfterLoad, clip);
         return { id: task.id, screenshot };
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);

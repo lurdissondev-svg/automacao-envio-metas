@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { loadConfig } from './config.js';
 import { logger } from './logger.js';
 import { Scheduler } from './scheduler.js';

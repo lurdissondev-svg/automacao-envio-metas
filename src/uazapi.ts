@@ -155,17 +155,35 @@ export class UazapiClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    const responseText = await response.text();
+
+    // Tentar parsear como JSON mesmo em caso de erro (UAZAPI retorna dados úteis em erros)
+    let jsonData: T;
+    try {
+      jsonData = JSON.parse(responseText) as T;
+    } catch {
+      if (!response.ok) {
+        logger.error('UAZAPI error', {
+          status: response.status,
+          statusText: response.statusText,
+          body: responseText,
+        });
+        throw new Error(`UAZAPI error: ${response.status} - ${responseText}`);
+      }
+      throw new Error(`Invalid JSON response: ${responseText}`);
+    }
+
+    // Para alguns endpoints, erro 409 ainda retorna dados úteis (como QR Code)
+    if (!response.ok && response.status !== 409) {
       logger.error('UAZAPI error', {
         status: response.status,
         statusText: response.statusText,
-        body: errorText,
+        body: responseText,
       });
-      throw new Error(`UAZAPI error: ${response.status} - ${errorText}`);
+      throw new Error(`UAZAPI error: ${response.status} - ${responseText}`);
     }
 
-    return response.json() as Promise<T>;
+    return jsonData;
   }
 
   // Verificar status da conexão
@@ -208,14 +226,18 @@ export class UazapiClient {
         { instance: this.instanceId }
       );
 
+      // QR Code pode estar em result.qrcode ou result.instance.qrcode
+      const qrcode = result.qrcode || result.instance?.qrcode || '';
+      const paircode = result.paircode || result.instance?.paircode || '';
+
       logger.info('QR Code obtido', {
-        hasQrCode: !!result.qrcode,
-        hasPairCode: !!result.paircode,
+        hasQrCode: !!qrcode,
+        hasPairCode: !!paircode,
       });
 
       return {
-        base64: result.qrcode || '',
-        pairingCode: result.paircode,
+        base64: qrcode,
+        pairingCode: paircode,
       };
     } catch (error) {
       logger.error('Erro ao obter QR Code UAZAPI', {
@@ -467,4 +489,103 @@ export class UazapiClient {
       throw error;
     }
   }
+
+  // Deletar instância
+  async deleteInstance(): Promise<void> {
+    try {
+      await this.request(
+        '/instance/delete',
+        'DELETE',
+        { instance: this.instanceId }
+      );
+      logger.info('Instância UAZAPI deletada', { instanceId: this.instanceId });
+      groupCache.clear();
+    } catch (error) {
+      logger.error('Erro ao deletar instância UAZAPI', {
+        error: error instanceof Error ? error.message : error,
+      });
+      throw error;
+    }
+  }
+}
+
+// ========== STATIC METHODS FOR ADMIN OPERATIONS ==========
+
+export interface CreateInstanceResponse {
+  instance: {
+    id: string;
+    token: string;
+    name: string;
+    status: string;
+  };
+  token: string;
+  response: string;
+}
+
+export async function createInstance(
+  baseUrl: string,
+  adminToken: string,
+  instanceName: string
+): Promise<CreateInstanceResponse> {
+  const url = `${baseUrl.replace(/\/$/, '')}/instance/create`;
+
+  logger.info('Criando nova instância UAZAPI', { instanceName });
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'admintoken': adminToken,
+    },
+    body: JSON.stringify({ Name: instanceName }),
+  });
+
+  const data = await response.json() as { message?: string; instance?: { id: string; name: string } };
+
+  if (!response.ok && response.status !== 409) {
+    throw new Error(data.message || `Erro ao criar instância: ${response.status}`);
+  }
+
+  logger.info('Instância criada com sucesso', {
+    instanceId: data.instance?.id,
+    instanceName: data.instance?.name,
+  });
+
+  return data as CreateInstanceResponse;
+}
+
+export async function deleteInstanceByAdmin(
+  baseUrl: string,
+  adminToken: string,
+  instanceId: string
+): Promise<void> {
+  const url = `${baseUrl.replace(/\/$/, '')}/instance/delete`;
+
+  logger.info('Deletando instância UAZAPI via admin', { instanceId });
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'admintoken': adminToken,
+    },
+    body: JSON.stringify({ instance: instanceId }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json() as { message?: string };
+    throw new Error(data.message || `Erro ao deletar instância: ${response.status}`);
+  }
+
+  logger.info('Instância deletada com sucesso', { instanceId });
+}
+
+export async function listInstances(
+  baseUrl: string,
+  adminToken: string
+): Promise<Array<{ id: string; name: string; status: string; token: string }>> {
+  // UAZAPI não tem endpoint oficial de listar todas as instâncias
+  // Retornamos array vazio - a instância atual vem da configuração
+  logger.info('Listando instâncias não suportado pela UAZAPI');
+  return [];
 }

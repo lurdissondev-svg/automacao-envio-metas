@@ -1052,15 +1052,218 @@
               <p id="whatsappStatus">Verificando...</p>
             </div>
           </div>
+          <div class="main-header-actions" style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" onclick="showInstanceInfo()" title="Info da Instancia">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="margin-right: 4px;">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+              </svg>
+              Info
+            </button>
+          </div>
         </div>
 
         <div class="qr-container" id="qrContainer">
           <div class="spinner"></div>
           <p style="margin-top: 16px;">Carregando...</p>
         </div>
+
+        <!-- Instance Management Section -->
+        <div id="instanceManagement" style="margin-top: 24px; padding: 20px; background: var(--whatsapp-sidebar); border-radius: 12px; max-width: 500px; margin-left: auto; margin-right: auto;">
+          <h3 style="margin-bottom: 16px; font-size: 16px;">Gerenciamento de Instancia</h3>
+          <div id="instanceInfo" style="margin-bottom: 16px; padding: 12px; background: var(--whatsapp-input); border-radius: 8px;">
+            <p style="font-size: 13px; color: var(--whatsapp-text-secondary);">Carregando info da instancia...</p>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="showCreateInstanceModal()" style="flex: 1; min-width: 140px;">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="margin-right: 4px;">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+              Nova Instancia
+            </button>
+            <button class="btn btn-danger" onclick="confirmDeleteInstance()" id="btnDeleteInstance" style="flex: 1; min-width: 140px;">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="margin-right: 4px;">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+              Deletar Instancia
+            </button>
+          </div>
+        </div>
       `;
 
+      await loadInstanceInfo();
       await loadQRCode();
+    }
+
+    // Carregar informacoes da instancia
+    async function loadInstanceInfo() {
+      const infoDiv = document.getElementById('instanceInfo');
+      try {
+        const response = await fetch('/api/instance/info');
+        const data = await response.json();
+
+        if (data.success) {
+          const info = data.data;
+          infoDiv.innerHTML = `
+            <div style="display: grid; gap: 8px; font-size: 13px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--whatsapp-text-secondary);">Instance ID:</span>
+                <span style="font-family: monospace;">${info.instanceId || 'Nao configurado'}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--whatsapp-text-secondary);">Status:</span>
+                <span style="color: ${info.connected ? 'var(--whatsapp-green)' : '#ff6b6b'};">${info.status || 'desconhecido'}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--whatsapp-text-secondary);">Admin Token:</span>
+                <span style="color: ${info.hasAdminToken ? 'var(--whatsapp-green)' : '#ff6b6b'};">${info.hasAdminToken ? 'Configurado' : 'Nao configurado'}</span>
+              </div>
+            </div>
+          `;
+
+          // Desabilitar botao de deletar se nao tem instancia
+          const btnDelete = document.getElementById('btnDeleteInstance');
+          if (btnDelete && !info.instanceId) {
+            btnDelete.disabled = true;
+            btnDelete.style.opacity = '0.5';
+          }
+        }
+      } catch (error) {
+        infoDiv.innerHTML = '<p style="color: #ff6b6b;">Erro ao carregar info</p>';
+      }
+    }
+
+    // Mostrar info da instancia
+    function showInstanceInfo() {
+      loadInstanceInfo();
+      showToast('Informacoes atualizadas', 'success');
+    }
+
+    // Modal para criar nova instancia
+    function showCreateInstanceModal() {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.id = 'createInstanceModal';
+      modal.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Criar Nova Instancia</h3>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Nome da Instancia</label>
+              <input type="text" id="newInstanceName" placeholder="ex: minha-automacao"
+                style="width: 100%; padding: 12px; border: 1px solid var(--whatsapp-border); border-radius: 8px; background: var(--whatsapp-input); color: var(--whatsapp-text);">
+              <small style="color: var(--whatsapp-text-secondary); display: block; margin-top: 4px;">
+                Use apenas letras, numeros e hifens
+              </small>
+            </div>
+            <div class="form-group" style="margin-top: 16px; padding: 12px; background: rgba(255, 193, 7, 0.1); border-radius: 8px; border: 1px solid rgba(255, 193, 7, 0.3);">
+              <p style="color: #ffc107; font-size: 13px;">
+                <strong>Atencao:</strong> Criar uma nova instancia substituira a configuracao atual.
+                A nova instancia sera configurada automaticamente no arquivo .env.
+              </p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeCreateInstanceModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="createNewInstance()">Criar Instancia</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    function closeCreateInstanceModal() {
+      const modal = document.getElementById('createInstanceModal');
+      if (modal) modal.remove();
+    }
+
+    // Criar nova instancia
+    async function createNewInstance() {
+      const nameInput = document.getElementById('newInstanceName');
+      const instanceName = nameInput.value.trim();
+
+      if (!instanceName) {
+        showToast('Digite um nome para a instancia', 'error');
+        return;
+      }
+
+      try {
+        showToast('Criando instancia...', 'info');
+        const response = await fetch('/api/instance/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instanceName })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          closeCreateInstanceModal();
+          showToast('Instancia criada com sucesso!', 'success');
+          // Recarregar painel
+          await showWhatsAppPanel();
+        } else {
+          showToast(data.error || 'Erro ao criar instancia', 'error');
+        }
+      } catch (error) {
+        showToast('Erro ao criar instancia', 'error');
+      }
+    }
+
+    // Confirmar exclusao de instancia
+    function confirmDeleteInstance() {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.id = 'deleteInstanceModal';
+      modal.innerHTML = `
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Deletar Instancia</h3>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom: 16px;">Tem certeza que deseja deletar a instancia atual?</p>
+            <div style="padding: 12px; background: rgba(255, 107, 107, 0.1); border-radius: 8px; border: 1px solid rgba(255, 107, 107, 0.3);">
+              <p style="color: #ff6b6b; font-size: 13px;">
+                <strong>Atencao:</strong> Esta acao e irreversivel. A instancia sera removida permanentemente da UAZAPI.
+              </p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeDeleteInstanceModal()">Cancelar</button>
+            <button class="btn btn-danger" onclick="deleteCurrentInstance()">Deletar</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    function closeDeleteInstanceModal() {
+      const modal = document.getElementById('deleteInstanceModal');
+      if (modal) modal.remove();
+    }
+
+    // Deletar instancia atual
+    async function deleteCurrentInstance() {
+      try {
+        showToast('Deletando instancia...', 'info');
+        const response = await fetch('/api/instance/delete', {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          closeDeleteInstanceModal();
+          showToast('Instancia deletada com sucesso!', 'success');
+          // Recarregar painel
+          await showWhatsAppPanel();
+        } else {
+          showToast(data.error || 'Erro ao deletar instancia', 'error');
+        }
+      } catch (error) {
+        showToast('Erro ao deletar instancia', 'error');
+      }
     }
 
     // Carregar QR Code
@@ -1119,7 +1322,7 @@
             </svg>
             <h3 style="margin-top: 20px; color: #ff6b6b;">Erro ao conectar</h3>
             <p class="qr-instructions" style="margin-top: 12px;">
-              ${data.error || 'Verifique se a Evolution API esta rodando e tente novamente.'}
+              ${data.error || 'Verifique se a UAZAPI esta rodando e tente novamente.'}
             </p>
             <button class="btn btn-primary" style="margin-top: 20px;" onclick="loadQRCode()">
               Tentar Novamente
@@ -1134,7 +1337,7 @@
           </svg>
           <h3 style="margin-top: 20px; color: #ff6b6b;">Erro de conexao</h3>
           <p class="qr-instructions" style="margin-top: 12px;">
-            Nao foi possivel conectar ao servidor. Verifique se a Evolution API esta ativa.
+            Nao foi possivel conectar ao servidor. Verifique se a UAZAPI esta ativa.
           </p>
           <button class="btn btn-primary" style="margin-top: 20px;" onclick="loadQRCode()">
             Tentar Novamente
@@ -1311,6 +1514,47 @@
               </svg>
               ${whatsappConnected ? 'Selecionar Grupos do WhatsApp' : 'Adicionar Grupo Manualmente'}
             </button>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-title">Captura do Screenshot</div>
+            <p style="font-size: 13px; color: var(--whatsapp-text-secondary); margin-bottom: 16px;">
+              Configure como capturar a planilha. Use seletor CSS para capturar um elemento específico, ou coordenadas para recortar uma área.
+            </p>
+
+            <div class="form-group">
+              <label class="form-label">Seletor CSS (recomendado)</label>
+              <input type="text" class="form-input" id="cssSelector"
+                     placeholder="Ex: .waffle, #sheet-container, etc"
+                     value="${schedule.selector || ''}">
+              <p style="font-size: 12px; color: var(--whatsapp-text-secondary); margin-top: 8px;">
+                Seletores comuns do Google Sheets: <code>.waffle</code> (tabela de dados), <code>.grid-container</code> (area de celulas)
+              </p>
+            </div>
+
+            <div style="margin: 16px 0; padding: 12px; background: var(--whatsapp-input); border-radius: 8px;">
+              <label style="font-size: 13px; color: var(--whatsapp-text-secondary); display: block; margin-bottom: 8px;">
+                Ou use coordenadas de recorte (alternativa):
+              </label>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                <div>
+                  <label style="font-size: 11px; color: var(--whatsapp-text-secondary);">X</label>
+                  <input type="number" class="form-input" id="clipX" placeholder="0" value="${schedule.clip?.x || ''}" min="0" style="padding: 8px;">
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: var(--whatsapp-text-secondary);">Y</label>
+                  <input type="number" class="form-input" id="clipY" placeholder="0" value="${schedule.clip?.y || ''}" min="0" style="padding: 8px;">
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: var(--whatsapp-text-secondary);">Largura</label>
+                  <input type="number" class="form-input" id="clipWidth" placeholder="1920" value="${schedule.clip?.width || ''}" min="1" style="padding: 8px;">
+                </div>
+                <div>
+                  <label style="font-size: 11px; color: var(--whatsapp-text-secondary);">Altura</label>
+                  <input type="number" class="form-input" id="clipHeight" placeholder="1080" value="${schedule.clip?.height || ''}" min="1" style="padding: 8px;">
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="form-section">
@@ -1513,6 +1757,25 @@
         // Coletar dados do formulario atual
         const cellMappings = selectedSchedule.cellMappings || [];
 
+        // Coletar seletor CSS
+        const selector = document.getElementById('cssSelector')?.value || null;
+
+        // Coletar clip se configurado
+        const clipX = document.getElementById('clipX')?.value;
+        const clipY = document.getElementById('clipY')?.value;
+        const clipWidth = document.getElementById('clipWidth')?.value;
+        const clipHeight = document.getElementById('clipHeight')?.value;
+
+        let clip = null;
+        if (clipX && clipY && clipWidth && clipHeight) {
+          clip = {
+            x: parseInt(clipX),
+            y: parseInt(clipY),
+            width: parseInt(clipWidth),
+            height: parseInt(clipHeight)
+          };
+        }
+
         const response = await fetch('/api/test/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1520,6 +1783,8 @@
             sheetUrl,
             messageTemplate,
             cellMappings,
+            clip,
+            selector,
             scheduleName: document.getElementById('scheduleName')?.value || selectedSchedule.name || 'Teste'
           })
         });
@@ -1829,6 +2094,25 @@
         DAYS.indexOf(btn.textContent.trim())
       );
 
+      // Coletar seletor CSS
+      const selector = document.getElementById('cssSelector')?.value || null;
+
+      // Coletar clip se configurado
+      const clipX = document.getElementById('clipX')?.value;
+      const clipY = document.getElementById('clipY')?.value;
+      const clipWidth = document.getElementById('clipWidth')?.value;
+      const clipHeight = document.getElementById('clipHeight')?.value;
+
+      let clip = null;
+      if (clipX && clipY && clipWidth && clipHeight) {
+        clip = {
+          x: parseInt(clipX),
+          y: parseInt(clipY),
+          width: parseInt(clipWidth),
+          height: parseInt(clipHeight)
+        };
+      }
+
       // Validacao
       if (!name || !sheetUrl || selectedSchedule.groups.length === 0 || days.length === 0) {
         showToast('Preencha todos os campos obrigatorios', 'error');
@@ -1844,7 +2128,9 @@
         days,
         messageTemplate,
         sheetTabs: selectedSchedule.sheetTabs || [],
-        cellMappings: (selectedSchedule.cellMappings || []).filter(m => m.variable && m.cell)
+        cellMappings: (selectedSchedule.cellMappings || []).filter(m => m.variable && m.cell),
+        clip,
+        selector
       };
 
       try {

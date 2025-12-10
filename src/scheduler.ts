@@ -73,7 +73,8 @@ export class Scheduler {
           captureTasks,
           schedule.viewport || this.appConfig.browser.defaultViewport,
           schedule.selector,
-          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad
+          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad,
+          schedule.clip
         );
 
         // Enviar imagens para cada grupo
@@ -137,7 +138,9 @@ export class Scheduler {
           schedule.sheetUrl,
           schedule.viewport || this.appConfig.browser.defaultViewport,
           schedule.selector,
-          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad
+          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad,
+          3, // maxRetries
+          schedule.clip // clip config
         );
 
         // Criar mensagem com dados da planilha

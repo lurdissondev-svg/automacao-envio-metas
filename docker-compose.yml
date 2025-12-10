@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  automacao-metas:
+    build: .
+    container_name: automacao-metas
+    restart: unless-stopped
+    ports:
+      - "3333:3333"
+    volumes:
+      # Persistir configuracao e logs
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Cuiaba
+    # Necessario para o Chromium funcionar
+    security_opt:
+      - seccomp:unconfined
+    # Shared memory para o Chrome
+    shm_size: '2gb'

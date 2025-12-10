@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -9,7 +10,7 @@ import { logger } from './logger.js';
 import { loadConfig } from './config.js';
 import { Scheduler } from './scheduler.js';
 import { initBrowser, closeBrowser, captureScreenshotWithRetry } from './screenshot.js';
-import { UazapiClient } from './uazapi.js';
+import { UazapiClient, createInstance, deleteInstanceByAdmin } from './uazapi.js';
 import { createMessageWithSheetData } from './templates.js';
 import { fetchSheetData } from './sheets.js';
 import type { ScheduleConfig, AppConfig, SheetTabConfig, CellMapping } from './types.js';
@@ -158,7 +159,7 @@ app.get('/api/schedules/:id', (req, res) => {
 app.post('/api/schedules', (req, res) => {
   try {
     const config = reloadConfig();
-    const { name, sheetUrl, groups, hours, minutes, days, messageTemplate, sheetTabs, cellMappings } = req.body;
+    const { name, sheetUrl, groups, hours, minutes, days, messageTemplate, sheetTabs, cellMappings, clip, selector } = req.body;
 
     // Validação básica
     if (!name || !sheetUrl || !groups || groups.length === 0) {
@@ -177,6 +178,8 @@ app.post('/api/schedules', (req, res) => {
       waitAfterLoad: config.settings.waitAfterLoad,
       sheetTabs: sheetTabs || [],
       cellMappings: cellMappings || [],
+      clip: clip || undefined,
+      selector: selector || undefined,
     };
 
     config.schedules.push(newSchedule);
@@ -211,7 +214,7 @@ app.put('/api/schedules/:id', (req, res) => {
       return res.status(404).json({ success: false, error: 'Schedule não encontrado' });
     }
 
-    const { name, sheetUrl, groups, hours, minutes, days, messageTemplate, sheetTabs, cellMappings } = req.body;
+    const { name, sheetUrl, groups, hours, minutes, days, messageTemplate, sheetTabs, cellMappings, clip, selector } = req.body;
 
     const cron = formatToCron(hours || '9', minutes || '0', days || [1, 2, 3, 4, 5]);
 
@@ -224,6 +227,8 @@ app.put('/api/schedules/:id', (req, res) => {
       messageTemplate: messageTemplate || config.schedules[index].messageTemplate,
       sheetTabs: sheetTabs !== undefined ? sheetTabs : config.schedules[index].sheetTabs,
       cellMappings: cellMappings !== undefined ? cellMappings : config.schedules[index].cellMappings,
+      clip: clip !== undefined ? clip : config.schedules[index].clip,
+      selector: selector !== undefined ? selector : config.schedules[index].selector,
     };
 
     saveConfig(config);
@@ -453,6 +458,146 @@ app.post('/api/whatsapp/restart', async (req, res) => {
   }
 });
 
+// ========== INSTANCE MANAGEMENT ==========
+
+// GET /api/instance/info - Informações da instância atual
+app.get('/api/instance/info', async (req, res) => {
+  try {
+    const config = reloadConfig();
+    const client = getUazapiClient();
+    const status = await client.checkConnection();
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: config.uazapi?.instanceId || process.env.UAZAPI_INSTANCE_ID,
+        baseUrl: config.uazapi?.baseUrl || process.env.UAZAPI_URL,
+        status: status.instance?.status || 'unknown',
+        connected: status.status?.connected || false,
+        hasAdminToken: !!(config.uazapi?.adminToken || process.env.UAZAPI_ADMIN_TOKEN),
+      },
+    });
+  } catch (error) {
+    logger.error('Erro ao obter info da instância', { error });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao obter info',
+    });
+  }
+});
+
+// POST /api/instance/create - Criar nova instância
+app.post('/api/instance/create', async (req, res) => {
+  try {
+    const { instanceName } = req.body;
+
+    if (!instanceName) {
+      return res.status(400).json({ success: false, error: 'instanceName é obrigatório' });
+    }
+
+    const baseUrl = process.env.UAZAPI_URL || '';
+    const adminToken = process.env.UAZAPI_ADMIN_TOKEN || '';
+
+    if (!baseUrl || !adminToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'UAZAPI_URL e UAZAPI_ADMIN_TOKEN devem estar configurados no .env',
+      });
+    }
+
+    const result = await createInstance(baseUrl, adminToken, instanceName);
+
+    // Atualizar .env com a nova instância
+    const envPath = path.resolve('.env');
+    let envContent = fs.readFileSync(envPath, 'utf-8');
+
+    // Atualizar ou adicionar UAZAPI_TOKEN e UAZAPI_INSTANCE_ID
+    if (envContent.includes('UAZAPI_TOKEN=')) {
+      envContent = envContent.replace(/UAZAPI_TOKEN=.*/, `UAZAPI_TOKEN=${result.token}`);
+    } else {
+      envContent += `\nUAZAPI_TOKEN=${result.token}`;
+    }
+
+    if (envContent.includes('UAZAPI_INSTANCE_ID=')) {
+      envContent = envContent.replace(/UAZAPI_INSTANCE_ID=.*/, `UAZAPI_INSTANCE_ID=${result.instance.id}`);
+    } else {
+      envContent += `\nUAZAPI_INSTANCE_ID=${result.instance.id}`;
+    }
+
+    fs.writeFileSync(envPath, envContent);
+
+    // Atualizar variáveis de ambiente em runtime
+    process.env.UAZAPI_TOKEN = result.token;
+    process.env.UAZAPI_INSTANCE_ID = result.instance.id;
+
+    // Resetar cliente UAZAPI para usar nova instância
+    uazapiClient = null;
+
+    logger.info('Nova instância criada e configurada', {
+      instanceId: result.instance.id,
+      instanceName: result.instance.name,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        instanceId: result.instance.id,
+        instanceName: result.instance.name,
+        token: result.token,
+        status: result.instance.status,
+      },
+      message: 'Instância criada com sucesso! Escaneie o QR Code para conectar.',
+    });
+  } catch (error) {
+    logger.error('Erro ao criar instância', { error });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao criar instância',
+    });
+  }
+});
+
+// DELETE /api/instance/delete - Deletar instância atual
+app.delete('/api/instance/delete', async (req, res) => {
+  try {
+    const baseUrl = process.env.UAZAPI_URL || '';
+    const adminToken = process.env.UAZAPI_ADMIN_TOKEN || '';
+    const instanceId = process.env.UAZAPI_INSTANCE_ID || '';
+
+    if (!baseUrl || !adminToken || !instanceId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Configuração incompleta para deletar instância',
+      });
+    }
+
+    await deleteInstanceByAdmin(baseUrl, adminToken, instanceId);
+
+    // Limpar .env
+    const envPath = path.resolve('.env');
+    let envContent = fs.readFileSync(envPath, 'utf-8');
+    envContent = envContent.replace(/UAZAPI_TOKEN=.*/, 'UAZAPI_TOKEN=');
+    envContent = envContent.replace(/UAZAPI_INSTANCE_ID=.*/, 'UAZAPI_INSTANCE_ID=');
+    fs.writeFileSync(envPath, envContent);
+
+    // Limpar variáveis em runtime
+    process.env.UAZAPI_TOKEN = '';
+    process.env.UAZAPI_INSTANCE_ID = '';
+    uazapiClient = null;
+
+    res.json({
+      success: true,
+      message: 'Instância deletada com sucesso',
+    });
+  } catch (error) {
+    logger.error('Erro ao deletar instância', { error });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro ao deletar instância',
+    });
+  }
+});
+
 // GET /api/whatsapp/groups - Listar grupos do WhatsApp (com cache)
 app.get('/api/whatsapp/groups', async (req, res) => {
   try {
@@ -619,7 +764,7 @@ app.post('/api/schedules/:id/preview', async (req, res) => {
 // POST /api/test/preview - Preview completo (screenshot + mensagem + dados)
 app.post('/api/test/preview', async (req, res) => {
   try {
-    const { sheetUrl, messageTemplate, cellMappings, scheduleName, viewport, selector, waitAfterLoad } = req.body;
+    const { sheetUrl, messageTemplate, cellMappings, scheduleName, viewport, selector, waitAfterLoad, clip } = req.body;
 
     if (!sheetUrl) {
       return res.status(400).json({ success: false, error: 'sheetUrl é obrigatório' });
@@ -627,7 +772,7 @@ app.post('/api/test/preview', async (req, res) => {
 
     const config = reloadConfig();
 
-    logger.info('Gerando preview de teste', { sheetUrl, scheduleName });
+    logger.info('Gerando preview de teste', { sheetUrl, scheduleName, clip });
 
     // Inicializar browser
     await initBrowser(config.browser);
@@ -637,7 +782,9 @@ app.post('/api/test/preview', async (req, res) => {
       sheetUrl,
       viewport || config.browser.defaultViewport,
       selector,
-      waitAfterLoad || config.settings.waitAfterLoad
+      waitAfterLoad || config.settings.waitAfterLoad,
+      3,
+      clip
     );
 
     // Buscar dados da planilha (se houver mapeamentos)

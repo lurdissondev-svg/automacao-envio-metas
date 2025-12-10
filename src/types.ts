@@ -30,6 +30,11 @@ export interface UazapiConnectResponse {
   loggedIn?: boolean;
   qrcode?: string;  // base64 data URI: "data:image/png;base64,..."
   paircode?: string;
+  instance?: {
+    qrcode?: string;
+    paircode?: string;
+    status?: string;
+  };
 }
 
 export interface UazapiSendMediaPayload {

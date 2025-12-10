@@ -1,59 +1,53 @@
-# ===========================================
-# Dockerfile - Container Leve (sem browser embutido)
-# ===========================================
-# Este container usa o Chrome instalado no host da VPS
-# montado via volume no docker-compose
-
 FROM node:20-slim
 
-# Dependências mínimas para Playwright conectar ao Chrome externo
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Bibliotecas necessárias para o Chrome
-    libnss3 \
-    libatk1.0-0 \
+# Instalar dependencias do Playwright/Chromium
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
     libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
     libcups2 \
+    libdbus-1-3 \
     libdrm2 \
-    libxkbcommon0 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
     libxcomposite1 \
     libxdamage1 \
     libxfixes3 \
+    libxkbcommon0 \
     libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2 \
-    # Utilitários
-    ca-certificates \
-    fonts-liberation \
-    # Limpeza
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    xdg-utils \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 
-# Diretório de trabalho
 WORKDIR /app
 
-# Copiar arquivos de dependências primeiro (cache de layers)
+# Copiar package files
 COPY package*.json ./
 
-# Instalar dependências (sem devDependencies)
-RUN npm ci --omit=dev
+# Instalar dependencias
+RUN npm ci
 
-# Copiar código fonte
+# Instalar Playwright browsers
+RUN npx playwright install chromium
+
+# Copiar codigo fonte
 COPY . .
 
-# Build do TypeScript
+# Compilar TypeScript
 RUN npm run build
 
-# Criar diretório de logs
-RUN mkdir -p /app/logs && chmod 755 /app/logs
+# Criar diretorios necessarios
+RUN mkdir -p logs config
 
-# Usuário não-root (opcional, pode causar problemas com Chrome)
-# USER node
+# Expor porta
+EXPOSE 3333
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD node -e "console.log('OK')" || exit 1
-
-# Comando padrão
-CMD ["node", "dist/index.js"]
+# Comando de inicio (usa o server compilado)
+CMD ["npm", "run", "start:server"]
