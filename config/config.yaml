@@ -1,0 +1,174 @@
+uazapi:
+  baseUrl: https://anderson.uazapi.com
+  token: eace40be-a9a1-4569-9fb9-e26e78d4ae01
+  instanceId: r44022da92d4690
+  adminToken: XZxapvAQmTZCycVx7vE6jnoHcuoTaqh5xENGheFoC7bkJzwLRR
+settings:
+  timezone: America/Cuiaba
+  delayBetweenMessages: 3000
+  delayBetweenGroups: 5000
+  pageTimeout: 30000
+  waitAfterLoad: 2000
+browser:
+  headless: true
+  defaultViewport:
+    width: 1920
+    height: 1080
+schedules:
+  - name: Metas Diárias - SPA
+    sheetUrl: https://docs.google.com/spreadsheets/d/12uwlnhL-dLvc7RnHV5TkHDBddl-kzBKkg-SlTi4uZG8/edit?gid=0#gid=0
+    groups:
+      - 120363425938525822@g.us
+    cron: 16 16 * * 1,2,3,4,5,6
+    viewport:
+      width: 1920
+      height: 1080
+    clip:
+      x: 65
+      y: 165
+      width: 1240
+      height: 190
+    messageTemplate: |
+      Bom dia! Tudo bem?
+
+      Dia da semana fizemos {valorDiario}
+
+      Fizemos no mês até então {valorMes}
+
+      Falta {valorMeta1} para batermos meta I
+      Falta {valorMeta2} para batermos meta II
+      Falta {valorMeta3} para batermos meta III
+    waitAfterLoad: 2000
+    sheetTabs: []
+    cellMappings:
+      - variable: valorDiario
+        cell: D6
+      - variable: valorMes
+        cell: A14
+      - variable: valorMeta1
+        cell: A15
+      - variable: valorMeta2
+        cell: A16
+      - variable: valorMeta3
+        cell: A17
+    selector: null
+  - name: Metas Diárias - CONVENIOS
+    sheetUrl: https://docs.google.com/spreadsheets/d/12uwlnhL-dLvc7RnHV5TkHDBddl-kzBKkg-SlTi4uZG8/edit?gid=1505490751#gid=1505490751
+    groups:
+      - 120363404753910183@g.us
+    cron: 14 16 * * 1,2,3,4,5,6
+    viewport:
+      width: 1920
+      height: 1080
+    clip:
+      x: 65
+      y: 165
+      width: 1240
+      height: 190
+    messageTemplate: |
+      Bom dia! Tudo bem?
+
+      Dia da semana fizemos {valorDiario}
+
+      Fizemos no mês até então {valorMes}
+
+      Falta {valorMeta1} para batermos meta I
+      Falta {valorMeta2} para batermos meta II
+      Falta {valorMeta3} para batermos meta III
+    waitAfterLoad: 2000
+    sheetTabs:
+      - groupId: 120363404753910183@g.us
+        groupName: Teste 2
+        tabName: ""
+    cellMappings:
+      - variable: valorDiario
+        cell: D6
+      - variable: valorMes
+        cell: A14
+      - variable: valorMeta1
+        cell: A15
+      - variable: valorMeta2
+        cell: A16
+      - variable: valorMeta3
+        cell: A17
+    selector: null
+  - name: Metas Diárias - BELA LASER
+    sheetUrl: https://docs.google.com/spreadsheets/d/12uwlnhL-dLvc7RnHV5TkHDBddl-kzBKkg-SlTi4uZG8/edit?gid=1409794560#gid=1409794560
+    groups:
+      - 120363424467345935@g.us
+    cron: 11 16 * * 1,2,3,4,5
+    viewport:
+      width: 1920
+      height: 1080
+    clip:
+      x: 65
+      y: 165
+      width: 1240
+      height: 190
+    messageTemplate: |
+      Bom dia! Tudo bem?
+
+      Dia da semana fizemos {valorDiario}
+
+      Fizemos no mês até então {valorMes}
+
+      Falta {valorMeta1} para batermos meta I
+      Falta {valorMeta2} para batermos meta II
+      Falta {valorMeta3} para batermos meta III
+    waitAfterLoad: 2000
+    sheetTabs:
+      - groupId: 120363424467345935@g.us
+        groupName: Teste 3
+        tabName: ""
+    cellMappings:
+      - variable: valorDiario
+        cell: D6
+      - variable: valorMes
+        cell: A14
+      - variable: valorMeta1
+        cell: A15
+      - variable: valorMeta2
+        cell: A16
+      - variable: valorMeta3
+        cell: A17
+    selector: null
+  - name: Metas Diárias - NUTROLOGIA
+    sheetUrl: https://docs.google.com/spreadsheets/d/12uwlnhL-dLvc7RnHV5TkHDBddl-kzBKkg-SlTi4uZG8/edit?gid=1534421663#gid=1534421663
+    groups:
+      - 120363421954660496@g.us
+    cron: 22 16 * * 1,2,3,4,5
+    viewport:
+      width: 1920
+      height: 1080
+    clip:
+      x: 65
+      y: 165
+      width: 1240
+      height: 190
+    messageTemplate: |
+      Bom dia! Tudo bem?
+
+      Dia da semana fizemos {valorDiario}
+
+      Fizemos no mês até então {valorMes}
+
+      Falta {valorMeta1} para batermos meta I
+      Falta {valorMeta2} para batermos meta II
+      Falta {valorMeta3} para batermos meta III
+    waitAfterLoad: 2000
+    sheetTabs:
+      - groupId: 120363421954660496@g.us
+        groupName: Teste 4
+        tabName: ""
+    cellMappings:
+      - variable: valorDiario
+        cell: D6
+      - variable: valorMes
+        cell: A14
+      - variable: valorMeta1
+        cell: A15
+      - variable: valorMeta2
+        cell: A16
+      - variable: valorMeta3
+        cell: A17
+    selector: null
