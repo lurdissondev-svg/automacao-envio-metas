@@ -2,33 +2,20 @@ import fs from 'fs';
 import path from 'path';
 import YAML from 'yaml';
 import { logger } from './logger.js';
-import type { AppConfig, ScheduleConfig, SettingsConfig, BrowserConfig, UazapiConfig } from './types.js';
+import type { AppConfig, ScheduleConfig, SettingsConfig, UazapiConfig } from './types.js';
 
-// Valores padrão
 const defaultSettings: SettingsConfig = {
   timezone: 'America/Sao_Paulo',
   delayBetweenMessages: 3000,
   delayBetweenGroups: 5000,
-  pageTimeout: 30000,
-  waitAfterLoad: 2000,
 };
 
-const defaultBrowser: BrowserConfig = {
-  headless: true,
-  defaultViewport: {
-    width: 1920,
-    height: 1080,
-  },
-};
-
-// Substituir variáveis de ambiente em strings
 function replaceEnvVars(value: string): string {
   return value.replace(/\$\{(\w+)\}/g, (_, envVar) => {
     return process.env[envVar] || '';
   });
 }
 
-// Processar objeto recursivamente para substituir env vars
 function processEnvVars(obj: unknown): unknown {
   if (typeof obj === 'string') {
     return replaceEnvVars(obj);
@@ -46,57 +33,30 @@ function processEnvVars(obj: unknown): unknown {
   return obj;
 }
 
-// Validar expressão cron
 function isValidCron(expression: string): boolean {
   const parts = expression.split(' ');
   if (parts.length !== 5) return false;
 
-  // Validação básica de cada campo
-  const ranges = [
-    { min: 0, max: 59 },   // minuto
-    { min: 0, max: 23 },   // hora
-    { min: 1, max: 31 },   // dia do mês
-    { min: 1, max: 12 },   // mês
-    { min: 0, max: 6 },    // dia da semana
-  ];
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
+  for (const part of parts) {
     if (part === '*') continue;
-
-    // Verificar ranges (ex: 1-5)
-    if (part.includes('-')) {
-      const [start, end] = part.split('-').map(Number);
-      if (isNaN(start) || isNaN(end)) continue; // Pode ter texto como MON-FRI
-    }
-
-    // Verificar steps (ex: */5)
     if (part.includes('/')) {
       const [, step] = part.split('/');
       if (isNaN(Number(step))) return false;
-    }
-
-    // Verificar lista (ex: 1,2,3)
-    if (part.includes(',')) {
-      continue; // Aceitar listas
     }
   }
 
   return true;
 }
 
-// Validar configuração de schedule
 function validateSchedule(schedule: ScheduleConfig, index: number): boolean {
   const errors: string[] = [];
 
   if (!schedule.name) {
-    errors.push(`Schedule ${index}: 'name' é obrigatório`);
+    errors.push(`Schedule ${index}: 'name' e obrigatorio`);
   }
 
-  if (!schedule.sheetUrl) {
-    errors.push(`Schedule ${index}: 'sheetUrl' é obrigatório`);
-  } else if (!schedule.sheetUrl.includes('docs.google.com/spreadsheets')) {
-    errors.push(`Schedule ${index}: 'sheetUrl' deve ser uma URL do Google Sheets`);
+  if (!schedule.message) {
+    errors.push(`Schedule ${index}: 'message' e obrigatorio`);
   }
 
   if (!schedule.groups || schedule.groups.length === 0) {
@@ -104,13 +64,9 @@ function validateSchedule(schedule: ScheduleConfig, index: number): boolean {
   }
 
   if (!schedule.cron) {
-    errors.push(`Schedule ${index}: 'cron' é obrigatório`);
+    errors.push(`Schedule ${index}: 'cron' e obrigatorio`);
   } else if (!isValidCron(schedule.cron)) {
-    errors.push(`Schedule ${index}: 'cron' inválido: ${schedule.cron}`);
-  }
-
-  if (!schedule.messageTemplate) {
-    errors.push(`Schedule ${index}: 'messageTemplate' é obrigatório`);
+    errors.push(`Schedule ${index}: 'cron' invalido: ${schedule.cron}`);
   }
 
   if (errors.length > 0) {
@@ -121,7 +77,6 @@ function validateSchedule(schedule: ScheduleConfig, index: number): boolean {
   return true;
 }
 
-// Carregar configuração
 export function loadConfig(configPath?: string): AppConfig {
   const configFile = configPath || process.env.CONFIG_PATH || './config/config.yaml';
   const absolutePath = path.resolve(configFile);
@@ -135,10 +90,8 @@ export function loadConfig(configPath?: string): AppConfig {
   const fileContent = fs.readFileSync(absolutePath, 'utf-8');
   const rawConfig = YAML.parse(fileContent);
 
-  // Processar variáveis de ambiente
   const config = processEnvVars(rawConfig) as Partial<AppConfig>;
 
-  // Validar UAZAPI config
   const uazapi: UazapiConfig = {
     baseUrl: config.uazapi?.baseUrl || process.env.UAZAPI_URL || '',
     token: config.uazapi?.token || process.env.UAZAPI_TOKEN || '',
@@ -146,53 +99,29 @@ export function loadConfig(configPath?: string): AppConfig {
     adminToken: config.uazapi?.adminToken || process.env.UAZAPI_ADMIN_TOKEN,
   };
 
-  if (!uazapi.baseUrl || !uazapi.token || !uazapi.instanceId) {
-    throw new Error('Configuração da UAZAPI incompleta. Verifique baseUrl, token e instanceId.');
+  if (!uazapi.baseUrl) {
+    throw new Error('Configuração da UAZAPI incompleta. Verifique baseUrl.');
   }
 
-  // Mesclar settings com padrões
   const settings: SettingsConfig = {
     ...defaultSettings,
     ...config.settings,
   };
 
-  // Mesclar browser config com padrões
-  const browser: BrowserConfig = {
-    ...defaultBrowser,
-    ...config.browser,
-    defaultViewport: {
-      ...defaultBrowser.defaultViewport,
-      ...config.browser?.defaultViewport,
-    },
-  };
-
-  // Validar schedules
   const schedules = config.schedules || [];
-  if (schedules.length === 0) {
-    throw new Error('Nenhum schedule configurado');
-  }
-
   const validSchedules: ScheduleConfig[] = [];
+
   schedules.forEach((schedule, index) => {
     if (validateSchedule(schedule, index)) {
-      validSchedules.push({
-        ...schedule,
-        viewport: schedule.viewport || browser.defaultViewport,
-        waitAfterLoad: schedule.waitAfterLoad || settings.waitAfterLoad,
-      });
+      validSchedules.push(schedule);
     }
   });
-
-  if (validSchedules.length === 0) {
-    throw new Error('Nenhum schedule válido encontrado');
-  }
 
   logger.info(`Configuração carregada: ${validSchedules.length} schedules válidos`);
 
   return {
     uazapi,
     settings,
-    browser,
     schedules: validSchedules,
   };
 }

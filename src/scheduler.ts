@@ -1,10 +1,9 @@
 import cron from 'node-cron';
+import fs from 'fs';
+import path from 'path';
 import { logger } from './logger.js';
-import type { ScheduleConfig, AppConfig, SheetTabConfig } from './types.js';
-import { initBrowser, closeBrowser, captureScreenshotWithRetry, captureScreenshotsParallel } from './screenshot.js';
+import type { ScheduleConfig, AppConfig } from './types.js';
 import { UazapiClient } from './uazapi.js';
-import { createMessageWithSheetData } from './templates.js';
-import { buildSheetUrlWithTab } from './sheets.js';
 
 interface ScheduledTask {
   name: string;
@@ -12,7 +11,6 @@ interface ScheduledTask {
   config: ScheduleConfig;
 }
 
-// Gerenciador de agendamentos
 export class Scheduler {
   private tasks: ScheduledTask[] = [];
   private uazapiClient: UazapiClient;
@@ -27,142 +25,53 @@ export class Scheduler {
     this.uazapiClient = new UazapiClient(config.uazapi);
   }
 
-  // Executar um schedule individual
   private async executeSchedule(schedule: ScheduleConfig): Promise<void> {
     const startTime = Date.now();
     logger.info(`Iniciando execução do schedule: ${schedule.name}`);
 
     try {
-      // Verificar conexão com WhatsApp
       const connected = await this.uazapiClient.isConnected();
       if (!connected) {
         throw new Error('WhatsApp não conectado');
       }
 
-      // Inicializar browser se necessário
-      await initBrowser(this.appConfig.browser);
+      // Carregar sticker se configurado
+      let stickerBuffer: Buffer | null = null;
+      if (schedule.stickerPath) {
+        const stickerFile = path.resolve(schedule.stickerPath);
+        if (fs.existsSync(stickerFile)) {
+          stickerBuffer = fs.readFileSync(stickerFile);
+          logger.info('Sticker carregado', { path: stickerFile, size: stickerBuffer.length });
+        } else {
+          logger.warn('Sticker não encontrado', { path: stickerFile });
+        }
+      }
 
       let successful = 0;
       let failed = 0;
+      const delay = this.appConfig.settings.delayBetweenGroups;
 
-      // Verificar se há configuração de abas por grupo
-      const hasTabConfigs = schedule.sheetTabs && schedule.sheetTabs.length > 0;
-
-      if (hasTabConfigs) {
-        // Modo: screenshot específico por grupo/aba (com captura paralela)
-        logger.info(`Processando ${schedule.groups.length} grupos com abas específicas (modo paralelo)`);
-
-        // Preparar tarefas para captura paralela
-        const captureTasks: { url: string; id: string; tabConfig?: SheetTabConfig }[] = [];
-
-        for (const groupId of schedule.groups) {
-          const tabConfig = schedule.sheetTabs?.find(t => t.groupId === groupId);
-          const tabIdentifier = tabConfig?.tabGid || tabConfig?.tabName;
-          const sheetUrlForGroup = buildSheetUrlWithTab(schedule.sheetUrl, tabIdentifier);
-
-          captureTasks.push({
-            url: sheetUrlForGroup,
-            id: groupId,
-            tabConfig,
+      for (let i = 0; i < schedule.groups.length; i++) {
+        const groupId = schedule.groups[i];
+        try {
+          // Enviar sticker primeiro (se configurado)
+          if (stickerBuffer) {
+            await this.uazapiClient.sendSticker(groupId, stickerBuffer);
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+          // Enviar texto
+          await this.uazapiClient.sendText(groupId, schedule.message);
+          successful++;
+        } catch (error) {
+          failed++;
+          logger.error(`Erro ao enviar para grupo ${groupId}`, {
+            error: error instanceof Error ? error.message : error,
           });
         }
-
-        // Capturar screenshots em paralelo
-        logger.info(`Capturando ${captureTasks.length} screenshots em paralelo...`);
-        const screenshotResults = await captureScreenshotsParallel(
-          captureTasks,
-          schedule.viewport || this.appConfig.browser.defaultViewport,
-          schedule.selector,
-          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad,
-          schedule.clip
-        );
-
-        // Enviar imagens para cada grupo
-        for (const result of screenshotResults) {
-          const groupId = result.id;
-          const task = captureTasks.find(t => t.id === groupId);
-
-          if (result.error) {
-            failed++;
-            logger.error(`Erro ao capturar screenshot para grupo ${groupId}`, {
-              error: result.error,
-            });
-            continue;
-          }
-
-          try {
-            const sheetUrlForGroup = task?.url || schedule.sheetUrl;
-
-            // Criar mensagem com dados da planilha
-            const message = await createMessageWithSheetData(
-              schedule.messageTemplate,
-              schedule.name,
-              this.appConfig.settings.timezone,
-              sheetUrlForGroup,
-              schedule.cellMappings
-            );
-
-            // Enviar para este grupo
-            const sendResult = await this.uazapiClient.sendImage(groupId, result.screenshot!, message);
-
-            if (sendResult && !(sendResult instanceof Error)) {
-              successful++;
-              logger.debug(`Enviado com sucesso para grupo ${groupId}`);
-            } else {
-              failed++;
-              logger.warn(`Falha ao enviar para grupo ${groupId}`, { error: sendResult });
-            }
-
-            // Delay entre envios
-            const index = screenshotResults.indexOf(result);
-            if (index < screenshotResults.length - 1) {
-              await new Promise(resolve =>
-                setTimeout(resolve, this.appConfig.settings.delayBetweenGroups)
-              );
-            }
-
-          } catch (groupError) {
-            failed++;
-            logger.error(`Erro ao processar grupo ${groupId}`, {
-              error: groupError instanceof Error ? groupError.message : groupError,
-            });
-          }
+        // Delay entre grupos
+        if (i < schedule.groups.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-
-      } else {
-        // Modo tradicional: um screenshot para todos os grupos
-        logger.info('Modo tradicional: screenshot único para todos os grupos');
-
-        // Capturar screenshot
-        const screenshot = await captureScreenshotWithRetry(
-          schedule.sheetUrl,
-          schedule.viewport || this.appConfig.browser.defaultViewport,
-          schedule.selector,
-          schedule.waitAfterLoad || this.appConfig.settings.waitAfterLoad,
-          3, // maxRetries
-          schedule.clip // clip config
-        );
-
-        // Criar mensagem com dados da planilha
-        const message = await createMessageWithSheetData(
-          schedule.messageTemplate,
-          schedule.name,
-          this.appConfig.settings.timezone,
-          schedule.sheetUrl,
-          schedule.cellMappings
-        );
-
-        // Enviar para grupos
-        const results = await this.uazapiClient.sendImageToGroups(
-          schedule.groups,
-          screenshot,
-          message,
-          this.appConfig.settings.delayBetweenGroups
-        );
-
-        // Contar resultados
-        successful = [...results.values()].filter(r => !(r instanceof Error)).length;
-        failed = schedule.groups.length - successful;
       }
 
       const duration = Date.now() - startTime;
@@ -182,12 +91,10 @@ export class Scheduler {
     }
   }
 
-  // Agendar um schedule
   private scheduleTask(schedule: ScheduleConfig): ScheduledTask {
     logger.info(`Agendando task: ${schedule.name}`, {
       cron: schedule.cron,
       groups: schedule.groups.length,
-      sheetUrl: schedule.sheetUrl,
     });
 
     const task = cron.schedule(
@@ -196,7 +103,7 @@ export class Scheduler {
         await this.executeSchedule(schedule);
       },
       {
-        scheduled: false, // Não iniciar automaticamente
+        scheduled: false,
         timezone: this.appConfig.settings.timezone,
       }
     );
@@ -208,7 +115,6 @@ export class Scheduler {
     };
   }
 
-  // Iniciar todos os schedules
   async start(): Promise<void> {
     if (this.isRunning) {
       logger.warn('Scheduler já está em execução');
@@ -220,7 +126,6 @@ export class Scheduler {
       schedules: this.appConfig.schedules.length,
     });
 
-    // Verificar conexão inicial
     try {
       const connected = await this.uazapiClient.isConnected();
       if (!connected) {
@@ -234,7 +139,6 @@ export class Scheduler {
       });
     }
 
-    // Criar e iniciar tasks
     for (const schedule of this.appConfig.schedules) {
       const scheduledTask = this.scheduleTask(schedule);
       scheduledTask.task.start();
@@ -246,11 +150,9 @@ export class Scheduler {
       tasksAtivas: this.tasks.length,
     });
 
-    // Listar próximas execuções
     this.logNextExecutions();
   }
 
-  // Parar todos os schedules
   async stop(): Promise<void> {
     logger.info('Parando Scheduler');
 
@@ -262,13 +164,9 @@ export class Scheduler {
     this.tasks = [];
     this.isRunning = false;
 
-    // Fechar browser
-    await closeBrowser();
-
     logger.info('Scheduler parado');
   }
 
-  // Executar um schedule manualmente
   async runNow(scheduleName?: string): Promise<void> {
     const schedules = scheduleName
       ? this.appConfig.schedules.filter(s => s.name === scheduleName)
@@ -286,7 +184,6 @@ export class Scheduler {
     for (const schedule of schedules) {
       await this.executeSchedule(schedule);
 
-      // Delay entre schedules
       if (schedules.indexOf(schedule) < schedules.length - 1) {
         await new Promise(resolve =>
           setTimeout(resolve, this.appConfig.settings.delayBetweenMessages)
@@ -295,7 +192,6 @@ export class Scheduler {
     }
   }
 
-  // Listar próximas execuções
   private logNextExecutions(): void {
     logger.info('=== Schedules Configurados ===');
     for (const { name, config } of this.tasks) {
@@ -304,7 +200,6 @@ export class Scheduler {
     logger.info('==============================');
   }
 
-  // Retornar status
   getStatus(): { isRunning: boolean; tasks: string[] } {
     return {
       isRunning: this.isRunning,

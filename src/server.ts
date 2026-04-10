@@ -4,16 +4,13 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';
 import YAML from 'yaml';
 import { logger } from './logger.js';
 import { loadConfig } from './config.js';
 import { Scheduler } from './scheduler.js';
-import { initBrowser, closeBrowser, captureScreenshotWithRetry } from './screenshot.js';
 import { UazapiClient, createInstance, deleteInstanceByAdmin } from './uazapi.js';
-import { createMessageWithSheetData } from './templates.js';
-import { fetchSheetData } from './sheets.js';
-import type { ScheduleConfig, AppConfig, SheetTabConfig, CellMapping } from './types.js';
+import { authMiddleware, verifyLogin } from './auth.js';
+import type { ScheduleConfig, AppConfig } from './types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,9 +20,37 @@ const PORT = process.env.PORT || 3333;
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
+
+// Auth middleware — protege todas as rotas /api/* exceto /api/auth/login
+app.use(authMiddleware);
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, error: 'Username e password obrigatórios' });
+    }
+
+    const token = await verifyLogin(username, password);
+    if (!token) {
+      return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+    }
+
+    res.json({ success: true, data: { token } });
+  } catch (error) {
+    logger.error('Erro no login', { error });
+    res.status(500).json({ success: false, error: 'Erro interno' });
+  }
+});
+
+const stickersDir = path.resolve('./config/stickers');
+if (!fs.existsSync(stickersDir)) {
+  fs.mkdirSync(stickersDir, { recursive: true });
+}
 
 // Variáveis globais
 let scheduler: Scheduler | null = null;
@@ -33,19 +58,16 @@ let currentConfig: AppConfig | null = null;
 let uazapiClient: UazapiClient | null = null;
 const configPath = process.env.CONFIG_PATH || './config/config.yaml';
 
-// Interface para schedule com ID
 interface ScheduleWithId extends ScheduleConfig {
   id: string;
   enabled: boolean;
 }
 
-// Carregar configuração
 function reloadConfig(): AppConfig {
   currentConfig = loadConfig(configPath);
   return currentConfig;
 }
 
-// Obter ou criar UAZAPI Client
 function getUazapiClient(): UazapiClient {
   const config = reloadConfig();
   if (!config.uazapi) {
@@ -57,12 +79,10 @@ function getUazapiClient(): UazapiClient {
   return uazapiClient;
 }
 
-// Salvar configuração
 function saveConfig(config: AppConfig): void {
   const yamlContent = YAML.stringify({
     uazapi: config.uazapi,
     settings: config.settings,
-    browser: config.browser,
     schedules: config.schedules,
   });
 
@@ -71,9 +91,8 @@ function saveConfig(config: AppConfig): void {
   logger.info('Configuração salva', { path: absolutePath });
 }
 
-// Converter cron para formato legível
-function parseCronToReadable(cron: string): { minutes: string; hours: string; days: number[] } {
-  const parts = cron.split(' ');
+function parseCronToReadable(cronStr: string): { minutes: string; hours: string; days: number[] } {
+  const parts = cronStr.split(' ');
   const dayMap: Record<string, number[]> = {
     '*': [0, 1, 2, 3, 4, 5, 6],
     '1-5': [1, 2, 3, 4, 5],
@@ -82,7 +101,6 @@ function parseCronToReadable(cron: string): { minutes: string; hours: string; da
 
   let days = dayMap[parts[4]] || [0, 1, 2, 3, 4, 5, 6];
 
-  // Parse range like 1-5
   if (parts[4].includes('-') && !dayMap[parts[4]]) {
     const [start, end] = parts[4].split('-').map(Number);
     days = [];
@@ -91,7 +109,6 @@ function parseCronToReadable(cron: string): { minutes: string; hours: string; da
     }
   }
 
-  // Parse list like 1,3,5
   if (parts[4].includes(',') && !dayMap[parts[4]]) {
     days = parts[4].split(',').map(Number);
   }
@@ -103,7 +120,6 @@ function parseCronToReadable(cron: string): { minutes: string; hours: string; da
   };
 }
 
-// Converter formato legível para cron
 function formatToCron(hours: string, minutes: string, days: number[]): string {
   const dayPart = days.length === 7 ? '*' : days.sort((a, b) => a - b).join(',');
   return `${minutes} ${hours} * * ${dayPart}`;
@@ -111,7 +127,7 @@ function formatToCron(hours: string, minutes: string, days: number[]): string {
 
 // ========== API ROUTES ==========
 
-// GET /api/schedules - Listar todos os schedules
+// GET /api/schedules
 app.get('/api/schedules', (req, res) => {
   try {
     const config = reloadConfig();
@@ -127,7 +143,7 @@ app.get('/api/schedules', (req, res) => {
   }
 });
 
-// GET /api/schedules/:id - Obter schedule específico
+// GET /api/schedules/:id
 app.get('/api/schedules/:id', (req, res) => {
   try {
     const config = reloadConfig();
@@ -155,37 +171,29 @@ app.get('/api/schedules/:id', (req, res) => {
   }
 });
 
-// POST /api/schedules - Criar novo schedule
+// POST /api/schedules
 app.post('/api/schedules', (req, res) => {
   try {
     const config = reloadConfig();
-    const { name, sheetUrl, groups, hours, minutes, days, messageTemplate, sheetTabs, cellMappings, clip, selector } = req.body;
+    const { name, message, groups, hours, minutes, days, stickerPath } = req.body;
 
-    // Validação básica
-    if (!name || !sheetUrl || !groups || groups.length === 0) {
-      return res.status(400).json({ success: false, error: 'Campos obrigatórios faltando' });
+    if (!name || !message || !groups || groups.length === 0) {
+      return res.status(400).json({ success: false, error: 'Campos obrigatórios faltando (name, message, groups)' });
     }
 
     const cron = formatToCron(hours || '9', minutes || '0', days || [1, 2, 3, 4, 5]);
 
     const newSchedule: ScheduleConfig = {
       name,
-      sheetUrl,
+      message,
       groups: Array.isArray(groups) ? groups : [groups],
       cron,
-      messageTemplate: messageTemplate || `📊 *{scheduleName}* - {date}\n\nAtualização das {time}`,
-      viewport: config.browser.defaultViewport,
-      waitAfterLoad: config.settings.waitAfterLoad,
-      sheetTabs: sheetTabs || [],
-      cellMappings: cellMappings || [],
-      clip: clip || undefined,
-      selector: selector || undefined,
+      stickerPath: stickerPath || undefined,
     };
 
     config.schedules.push(newSchedule);
     saveConfig(config);
 
-    // Reiniciar scheduler se estiver rodando
     if (scheduler) {
       restartScheduler();
     }
@@ -204,7 +212,7 @@ app.post('/api/schedules', (req, res) => {
   }
 });
 
-// PUT /api/schedules/:id - Atualizar schedule
+// PUT /api/schedules/:id
 app.put('/api/schedules/:id', (req, res) => {
   try {
     const config = reloadConfig();
@@ -214,26 +222,20 @@ app.put('/api/schedules/:id', (req, res) => {
       return res.status(404).json({ success: false, error: 'Schedule não encontrado' });
     }
 
-    const { name, sheetUrl, groups, hours, minutes, days, messageTemplate, sheetTabs, cellMappings, clip, selector } = req.body;
+    const { name, message, groups, hours, minutes, days, stickerPath } = req.body;
 
     const cron = formatToCron(hours || '9', minutes || '0', days || [1, 2, 3, 4, 5]);
 
     config.schedules[index] = {
-      ...config.schedules[index],
       name: name || config.schedules[index].name,
-      sheetUrl: sheetUrl || config.schedules[index].sheetUrl,
+      message: message || config.schedules[index].message,
       groups: groups || config.schedules[index].groups,
       cron,
-      messageTemplate: messageTemplate || config.schedules[index].messageTemplate,
-      sheetTabs: sheetTabs !== undefined ? sheetTabs : config.schedules[index].sheetTabs,
-      cellMappings: cellMappings !== undefined ? cellMappings : config.schedules[index].cellMappings,
-      clip: clip !== undefined ? clip : config.schedules[index].clip,
-      selector: selector !== undefined ? selector : config.schedules[index].selector,
+      stickerPath: stickerPath !== undefined ? (stickerPath || undefined) : config.schedules[index].stickerPath,
     };
 
     saveConfig(config);
 
-    // Reiniciar scheduler se estiver rodando
     if (scheduler) {
       restartScheduler();
     }
@@ -252,7 +254,7 @@ app.put('/api/schedules/:id', (req, res) => {
   }
 });
 
-// DELETE /api/schedules/:id - Remover schedule
+// DELETE /api/schedules/:id
 app.delete('/api/schedules/:id', (req, res) => {
   try {
     const config = reloadConfig();
@@ -265,7 +267,6 @@ app.delete('/api/schedules/:id', (req, res) => {
     config.schedules.splice(index, 1);
     saveConfig(config);
 
-    // Reiniciar scheduler se estiver rodando
     if (scheduler) {
       restartScheduler();
     }
@@ -277,7 +278,7 @@ app.delete('/api/schedules/:id', (req, res) => {
   }
 });
 
-// POST /api/schedules/:id/run - Executar schedule manualmente
+// POST /api/schedules/:id/run
 app.post('/api/schedules/:id/run', async (req, res) => {
   try {
     const config = reloadConfig();
@@ -292,7 +293,6 @@ app.post('/api/schedules/:id/run', async (req, res) => {
       scheduler = new Scheduler(config);
     }
 
-    // Executar em background
     scheduler.runNow(schedule.name).catch(err => {
       logger.error('Erro na execução manual', { error: err });
     });
@@ -304,7 +304,7 @@ app.post('/api/schedules/:id/run', async (req, res) => {
   }
 });
 
-// GET /api/settings - Obter configurações gerais
+// GET /api/settings
 app.get('/api/settings', (req, res) => {
   try {
     const config = reloadConfig();
@@ -313,10 +313,8 @@ app.get('/api/settings', (req, res) => {
       data: {
         uazapi: config.uazapi ? {
           baseUrl: config.uazapi.baseUrl,
-          // Não expor token por segurança
         } : null,
         settings: config.settings,
-        browser: config.browser,
       },
     });
   } catch (error) {
@@ -325,20 +323,17 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
-// PUT /api/settings - Atualizar configurações
+// PUT /api/settings
 app.put('/api/settings', (req, res) => {
   try {
     const config = reloadConfig();
-    const { uazapi, settings, browser } = req.body;
+    const { uazapi, settings } = req.body;
 
     if (uazapi) {
       config.uazapi = { ...config.uazapi, ...uazapi };
     }
     if (settings) {
       config.settings = { ...config.settings, ...settings };
-    }
-    if (browser) {
-      config.browser = { ...config.browser, ...browser };
     }
 
     saveConfig(config);
@@ -351,7 +346,7 @@ app.put('/api/settings', (req, res) => {
 
 // ========== WHATSAPP API ROUTES ==========
 
-// GET /api/whatsapp/status - Status da conexão WhatsApp
+// GET /api/whatsapp/status
 app.get('/api/whatsapp/status', async (req, res) => {
   try {
     const client = getUazapiClient();
@@ -383,12 +378,11 @@ app.get('/api/whatsapp/status', async (req, res) => {
   }
 });
 
-// GET /api/whatsapp/qrcode - Obter QR Code para conexão
+// GET /api/whatsapp/qrcode
 app.get('/api/whatsapp/qrcode', async (req, res) => {
   try {
     const client = getUazapiClient();
 
-    // Verificar se já está conectado
     const isConnected = await client.isConnected();
     if (isConnected) {
       return res.json({
@@ -400,7 +394,6 @@ app.get('/api/whatsapp/qrcode', async (req, res) => {
       });
     }
 
-    // UAZAPI retorna QR Code já em base64 data URI
     const qrCode = await client.getQRCode();
 
     res.json({
@@ -420,7 +413,7 @@ app.get('/api/whatsapp/qrcode', async (req, res) => {
   }
 });
 
-// POST /api/whatsapp/logout - Desconectar WhatsApp
+// POST /api/whatsapp/logout
 app.post('/api/whatsapp/logout', async (req, res) => {
   try {
     const client = getUazapiClient();
@@ -439,7 +432,7 @@ app.post('/api/whatsapp/logout', async (req, res) => {
   }
 });
 
-// POST /api/whatsapp/restart - Reiniciar instância
+// POST /api/whatsapp/restart
 app.post('/api/whatsapp/restart', async (req, res) => {
   try {
     const client = getUazapiClient();
@@ -460,7 +453,7 @@ app.post('/api/whatsapp/restart', async (req, res) => {
 
 // ========== INSTANCE MANAGEMENT ==========
 
-// GET /api/instance/info - Informações da instância atual
+// GET /api/instance/info
 app.get('/api/instance/info', async (req, res) => {
   try {
     const config = reloadConfig();
@@ -470,11 +463,11 @@ app.get('/api/instance/info', async (req, res) => {
     res.json({
       success: true,
       data: {
-        instanceId: config.uazapi?.instanceId || process.env.UAZAPI_INSTANCE_ID,
-        baseUrl: config.uazapi?.baseUrl || process.env.UAZAPI_URL,
+        instanceId: config.uazapi?.instanceId,
+        baseUrl: config.uazapi?.baseUrl,
         status: status.instance?.status || 'unknown',
         connected: status.status?.connected || false,
-        hasAdminToken: !!(config.uazapi?.adminToken || process.env.UAZAPI_ADMIN_TOKEN),
+        hasAdminToken: !!config.uazapi?.adminToken,
       },
     });
   } catch (error) {
@@ -486,7 +479,7 @@ app.get('/api/instance/info', async (req, res) => {
   }
 });
 
-// POST /api/instance/create - Criar nova instância
+// POST /api/instance/create
 app.post('/api/instance/create', async (req, res) => {
   try {
     const { instanceName } = req.body;
@@ -496,8 +489,8 @@ app.post('/api/instance/create', async (req, res) => {
       return res.status(400).json({ success: false, error: 'instanceName é obrigatório' });
     }
 
-    const baseUrl = config.uazapi.baseUrl;
-    const adminToken = config.uazapi.adminToken || '';
+    const baseUrl = config.uazapi?.baseUrl;
+    const adminToken = config.uazapi?.adminToken || '';
 
     if (!baseUrl || !adminToken) {
       return res.status(400).json({
@@ -508,14 +501,12 @@ app.post('/api/instance/create', async (req, res) => {
 
     const result = await createInstance(baseUrl, adminToken, instanceName);
 
-    // Atualizar config.yaml com a nova instância
     const configContent = fs.readFileSync(configPath, 'utf-8');
-    let updatedConfig = configContent
+    const updatedConfig = configContent
       .replace(/token:\s*.*/, `token: ${result.token}`)
       .replace(/instanceId:\s*.*/, `instanceId: ${result.instance.id}`);
     fs.writeFileSync(configPath, updatedConfig);
 
-    // Resetar cliente UAZAPI para usar nova instância
     uazapiClient = null;
 
     logger.info('Nova instância criada e configurada', {
@@ -542,57 +533,29 @@ app.post('/api/instance/create', async (req, res) => {
   }
 });
 
-// POST /api/whatsapp/logout - Desconectar WhatsApp (permite conectar outro número)
-app.post('/api/whatsapp/logout', async (req, res) => {
-  try {
-    const client = getUazapiClient();
-    if (!client) {
-      return res.status(400).json({
-        success: false,
-        error: 'Cliente UAZAPI não inicializado',
-      });
-    }
-
-    await client.logout();
-
-    res.json({
-      success: true,
-      message: 'WhatsApp desconectado com sucesso. Escaneie o QR Code para conectar outro número.',
-    });
-  } catch (error) {
-    logger.error('Erro ao fazer logout WhatsApp', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro ao desconectar WhatsApp',
-    });
-  }
-});
-
-// DELETE /api/instance/delete - Deletar instância atual
+// DELETE /api/instance/delete
 app.delete('/api/instance/delete', async (req, res) => {
   try {
     const config = reloadConfig();
-    const baseUrl = config.uazapi.baseUrl;
-    const adminToken = config.uazapi.adminToken || '';
-    const instanceId = config.uazapi.instanceId;
+    const baseUrl = config.uazapi?.baseUrl;
+    const adminToken = config.uazapi?.adminToken || '';
+    const instanceId = config.uazapi?.instanceId;
 
     if (!baseUrl || !adminToken || !instanceId) {
       return res.status(400).json({
         success: false,
-        error: 'Configuração incompleta para deletar instância (verifique baseUrl, adminToken e instanceId no config.yaml)',
+        error: 'Configuração incompleta para deletar instância',
       });
     }
 
     await deleteInstanceByAdmin(baseUrl, adminToken, instanceId);
 
-    // Limpar config.yaml (remover token e instanceId)
     const configContent = fs.readFileSync(configPath, 'utf-8');
     const updatedConfig = configContent
       .replace(/token:\s*.*/, 'token: ')
       .replace(/instanceId:\s*.*/, 'instanceId: ');
     fs.writeFileSync(configPath, updatedConfig);
 
-    // Resetar cliente
     uazapiClient = null;
 
     res.json({
@@ -608,17 +571,16 @@ app.delete('/api/instance/delete', async (req, res) => {
   }
 });
 
-// GET /api/whatsapp/groups - Listar grupos do WhatsApp (com cache)
+// GET /api/whatsapp/groups
 app.get('/api/whatsapp/groups', async (req, res) => {
   try {
     const client = getUazapiClient();
 
-    // Verificar conexão primeiro
     const isConnected = await client.isConnected();
     if (!isConnected) {
       return res.status(400).json({
         success: false,
-        error: 'WhatsApp não está conectado. Escaneie o QR Code primeiro.',
+        error: 'WhatsApp não está conectado.',
       });
     }
 
@@ -649,17 +611,16 @@ app.get('/api/whatsapp/groups', async (req, res) => {
   }
 });
 
-// GET /api/groups/refresh - Forçar atualização da lista de grupos
+// GET /api/groups/refresh
 app.get('/api/groups/refresh', async (req, res) => {
   try {
     const client = getUazapiClient();
 
-    // Verificar conexão primeiro
     const isConnected = await client.isConnected();
     if (!isConnected) {
       return res.status(400).json({
         success: false,
-        error: 'WhatsApp não está conectado. Escaneie o QR Code primeiro.',
+        error: 'WhatsApp não está conectado.',
       });
     }
 
@@ -686,287 +647,59 @@ app.get('/api/groups/refresh', async (req, res) => {
   }
 });
 
-// GET /api/groups/cache - Obter estatísticas do cache de grupos
-app.get('/api/groups/cache', (req, res) => {
+// GET /api/stickers - Listar stickers disponíveis
+app.get('/api/stickers', (req, res) => {
   try {
-    const client = getUazapiClient();
-    const stats = client.getGroupCacheStats();
-
-    res.json({
-      success: true,
-      data: stats,
-    });
+    const files = fs.readdirSync(stickersDir).filter(f => f.endsWith('.webp'));
+    const stickers = files.map(f => ({
+      name: f,
+      path: `./config/stickers/${f}`,
+    }));
+    res.json({ success: true, data: stickers });
   } catch (error) {
-    logger.error('Erro ao obter estatísticas do cache', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro ao obter estatísticas',
-    });
+    res.json({ success: true, data: [] });
   }
 });
 
-// ========== PREVIEW/TEST ROUTES ==========
-
-// POST /api/schedules/:id/preview - Preview sem enviar (para teste)
-app.post('/api/schedules/:id/preview', async (req, res) => {
+// POST /api/stickers/upload - Upload de sticker webp
+app.post('/api/stickers/upload', (req, res) => {
   try {
-    const config = reloadConfig();
-    const index = parseInt(req.params.id.replace('schedule-', ''));
-    const schedule = config.schedules[index];
-
-    if (!schedule) {
-      return res.status(404).json({ success: false, error: 'Schedule não encontrado' });
+    const { name, data: base64Data } = req.body;
+    if (!name || !base64Data) {
+      return res.status(400).json({ success: false, error: 'name e data são obrigatórios' });
     }
 
-    logger.info('Gerando preview do schedule', { name: schedule.name });
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '') + '.webp';
+    const filePath = path.join(stickersDir, safeName);
+    const buffer = Buffer.from(base64Data, 'base64');
+    fs.writeFileSync(filePath, buffer);
 
-    // Inicializar browser
-    await initBrowser(config.browser);
-
-    // Capturar screenshot
-    const screenshot = await captureScreenshotWithRetry(
-      schedule.sheetUrl,
-      schedule.viewport || config.browser.defaultViewport,
-      schedule.selector,
-      schedule.waitAfterLoad || config.settings.waitAfterLoad
-    );
-
-    // Buscar dados da planilha (se houver mapeamentos)
-    let sheetData: Record<string, string> = {};
-    if (schedule.cellMappings && schedule.cellMappings.length > 0) {
-      sheetData = await fetchSheetData(schedule.sheetUrl, schedule.cellMappings);
-    }
-
-    // Criar mensagem
-    const message = await createMessageWithSheetData(
-      schedule.messageTemplate,
-      schedule.name,
-      config.settings.timezone,
-      schedule.sheetUrl,
-      schedule.cellMappings
-    );
-
-    // Converter screenshot para base64
-    const screenshotBase64 = `data:image/png;base64,${screenshot.toString('base64')}`;
+    logger.info('Sticker salvo', { name: safeName, size: buffer.length });
 
     res.json({
       success: true,
       data: {
-        screenshot: screenshotBase64,
-        message,
-        sheetData,
-        schedule: {
-          name: schedule.name,
-          sheetUrl: schedule.sheetUrl,
-          groups: schedule.groups,
-        },
+        name: safeName,
+        path: `./config/stickers/${safeName}`,
       },
     });
   } catch (error) {
-    logger.error('Erro ao gerar preview', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro ao gerar preview',
-    });
+    logger.error('Erro ao salvar sticker', { error });
+    res.status(500).json({ success: false, error: 'Erro ao salvar sticker' });
   }
 });
 
-// POST /api/test/preview - Preview completo (screenshot + mensagem + dados)
-app.post('/api/test/preview', async (req, res) => {
-  try {
-    const { sheetUrl, messageTemplate, cellMappings, scheduleName, viewport, selector, waitAfterLoad, clip } = req.body;
-
-    if (!sheetUrl) {
-      return res.status(400).json({ success: false, error: 'sheetUrl é obrigatório' });
-    }
-
-    const config = reloadConfig();
-
-    logger.info('Gerando preview de teste', { sheetUrl, scheduleName, clip });
-
-    // Inicializar browser
-    await initBrowser(config.browser);
-
-    // Capturar screenshot
-    const screenshot = await captureScreenshotWithRetry(
-      sheetUrl,
-      viewport || config.browser.defaultViewport,
-      selector,
-      waitAfterLoad || config.settings.waitAfterLoad,
-      3,
-      clip
-    );
-
-    // Buscar dados da planilha (se houver mapeamentos)
-    let variables: Record<string, string> = {};
-    let sheetError: string | null = null;
-
-    if (cellMappings && Array.isArray(cellMappings) && cellMappings.length > 0) {
-      try {
-        variables = await fetchSheetData(sheetUrl, cellMappings);
-        if (Object.keys(variables).length === 0 && cellMappings.length > 0) {
-          sheetError = 'Não foi possível extrair dados da planilha. Verifique se a planilha está pública (Compartilhar -> "Qualquer pessoa com o link pode ver").';
-        }
-      } catch (sheetErr) {
-        sheetError = sheetErr instanceof Error ? sheetErr.message : 'Erro ao buscar dados da planilha';
-        logger.warn('Erro ao buscar dados da planilha para preview', { error: sheetError });
-      }
-    }
-
-    // Criar mensagem
-    const message = await createMessageWithSheetData(
-      messageTemplate || '{scheduleName} - {date}',
-      scheduleName || 'Teste',
-      config.settings.timezone,
-      sheetUrl,
-      cellMappings
-    );
-
-    // Converter screenshot para base64
-    const screenshotBase64 = `data:image/png;base64,${screenshot.toString('base64')}`;
-
-    res.json({
-      success: true,
-      data: {
-        screenshot: screenshotBase64,
-        message,
-        variables,
-        sheetError, // Aviso sobre erro na planilha (se houver)
-      },
-    });
-  } catch (error) {
-    logger.error('Erro ao gerar preview de teste', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro ao gerar preview',
-    });
-  }
-});
-
-// POST /api/test/screenshot - Testar captura de screenshot (sem schedule)
-app.post('/api/test/screenshot', async (req, res) => {
-  try {
-    const { sheetUrl, viewport, selector, waitAfterLoad } = req.body;
-
-    if (!sheetUrl) {
-      return res.status(400).json({ success: false, error: 'sheetUrl é obrigatório' });
-    }
-
-    const config = reloadConfig();
-
-    logger.info('Capturando screenshot de teste', { sheetUrl });
-
-    // Inicializar browser
-    await initBrowser(config.browser);
-
-    // Capturar screenshot
-    const screenshot = await captureScreenshotWithRetry(
-      sheetUrl,
-      viewport || config.browser.defaultViewport,
-      selector,
-      waitAfterLoad || config.settings.waitAfterLoad
-    );
-
-    // Converter para base64
-    const screenshotBase64 = `data:image/png;base64,${screenshot.toString('base64')}`;
-
-    res.json({
-      success: true,
-      data: {
-        screenshot: screenshotBase64,
-      },
-    });
-  } catch (error) {
-    logger.error('Erro ao capturar screenshot de teste', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro ao capturar screenshot',
-    });
-  }
-});
-
-// POST /api/test/sheet-data - Testar extração de dados da planilha
-app.post('/api/test/sheet-data', async (req, res) => {
-  try {
-    const { sheetUrl, cellMappings } = req.body;
-
-    if (!sheetUrl) {
-      return res.status(400).json({ success: false, error: 'sheetUrl é obrigatório' });
-    }
-
-    if (!cellMappings || !Array.isArray(cellMappings) || cellMappings.length === 0) {
-      return res.status(400).json({ success: false, error: 'cellMappings é obrigatório' });
-    }
-
-    logger.info('Testando extração de dados', { sheetUrl, cellMappings });
-
-    const sheetData = await fetchSheetData(sheetUrl, cellMappings);
-
-    res.json({
-      success: true,
-      data: {
-        sheetData,
-        mappings: cellMappings,
-      },
-    });
-  } catch (error) {
-    logger.error('Erro ao extrair dados da planilha', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro ao extrair dados',
-    });
-  }
-});
-
-// POST /api/test/message - Testar geração de mensagem
-app.post('/api/test/message', async (req, res) => {
-  try {
-    const { messageTemplate, scheduleName, sheetUrl, cellMappings } = req.body;
-
-    if (!messageTemplate) {
-      return res.status(400).json({ success: false, error: 'messageTemplate é obrigatório' });
-    }
-
-    const config = reloadConfig();
-
-    logger.info('Testando geração de mensagem', { scheduleName });
-
-    const message = await createMessageWithSheetData(
-      messageTemplate,
-      scheduleName || 'Teste',
-      config.settings.timezone,
-      sheetUrl,
-      cellMappings
-    );
-
-    res.json({
-      success: true,
-      data: {
-        message,
-      },
-    });
-  } catch (error) {
-    logger.error('Erro ao gerar mensagem de teste', { error });
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro ao gerar mensagem',
-    });
-  }
-});
-
-// POST /api/test/send - Enviar teste para um grupo específico
+// POST /api/test/send - Enviar teste para um grupo
 app.post('/api/test/send', async (req, res) => {
   try {
-    const { sheetUrl, groupId, messageTemplate, cellMappings, scheduleName, screenshot: screenshotBase64, message: precomputedMessage } = req.body;
+    const { groupId, message, stickerPath } = req.body;
 
-    if (!groupId) {
-      return res.status(400).json({ success: false, error: 'groupId é obrigatório' });
+    if (!groupId || !message) {
+      return res.status(400).json({ success: false, error: 'groupId e message são obrigatórios' });
     }
 
-    const config = reloadConfig();
     const client = getUazapiClient();
 
-    // Verificar conexão
     const isConnected = await client.isConnected();
     if (!isConnected) {
       return res.status(400).json({
@@ -975,49 +708,19 @@ app.post('/api/test/send', async (req, res) => {
       });
     }
 
-    logger.info('Enviando teste', { groupId });
+    logger.info('Enviando teste', { groupId, hasSticker: !!stickerPath });
 
-    let screenshot: Buffer;
-    let message: string;
-
-    // Se screenshot e mensagem já foram enviados, usar eles
-    if (screenshotBase64 && precomputedMessage) {
-      // Converter base64 data URI para Buffer
-      const base64Data = screenshotBase64.replace(/^data:image\/\w+;base64,/, '');
-      screenshot = Buffer.from(base64Data, 'base64');
-      message = precomputedMessage;
-    } else {
-      // Caso contrário, capturar screenshot e gerar mensagem
-      if (!sheetUrl) {
-        return res.status(400).json({ success: false, error: 'sheetUrl é obrigatório' });
+    // Enviar sticker primeiro se configurado
+    if (stickerPath) {
+      const stickerFile = path.resolve(stickerPath);
+      if (fs.existsSync(stickerFile)) {
+        const stickerBuffer = fs.readFileSync(stickerFile);
+        await client.sendSticker(groupId, stickerBuffer);
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
-      if (!messageTemplate) {
-        return res.status(400).json({ success: false, error: 'messageTemplate é obrigatório' });
-      }
-
-      // Inicializar browser
-      await initBrowser(config.browser);
-
-      // Capturar screenshot
-      screenshot = await captureScreenshotWithRetry(
-        sheetUrl,
-        config.browser.defaultViewport,
-        undefined,
-        config.settings.waitAfterLoad
-      );
-
-      // Criar mensagem
-      message = await createMessageWithSheetData(
-        messageTemplate,
-        scheduleName || 'Teste',
-        config.settings.timezone,
-        sheetUrl,
-        cellMappings
-      );
     }
 
-    // Enviar
-    const result = await client.sendImage(groupId, screenshot, message);
+    const result = await client.sendText(groupId, message);
 
     res.json({
       success: true,
@@ -1036,7 +739,7 @@ app.post('/api/test/send', async (req, res) => {
   }
 });
 
-// GET /api/status - Status do scheduler
+// GET /api/status
 app.get('/api/status', (req, res) => {
   res.json({
     success: true,
@@ -1047,7 +750,7 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// POST /api/scheduler/start - Iniciar scheduler
+// POST /api/scheduler/start
 app.post('/api/scheduler/start', async (req, res) => {
   try {
     if (scheduler?.getStatus().isRunning) {
@@ -1065,7 +768,7 @@ app.post('/api/scheduler/start', async (req, res) => {
   }
 });
 
-// POST /api/scheduler/stop - Parar scheduler
+// POST /api/scheduler/stop
 app.post('/api/scheduler/stop', async (req, res) => {
   try {
     if (scheduler) {
@@ -1079,7 +782,6 @@ app.post('/api/scheduler/stop', async (req, res) => {
   }
 });
 
-// Função para reiniciar scheduler
 async function restartScheduler(): Promise<void> {
   if (scheduler) {
     await scheduler.stop();
@@ -1089,26 +791,21 @@ async function restartScheduler(): Promise<void> {
   }
 }
 
-// Servir index.html para rotas não-API
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Tratamento de sinais
 async function shutdown(signal: string): Promise<void> {
   logger.info(`Recebido sinal ${signal}. Encerrando...`);
   if (scheduler) {
     await scheduler.stop();
   }
-  // Parar sincronização de grupos
   if (uazapiClient) {
     uazapiClient.stopGroupSync();
   }
-  await closeBrowser();
   process.exit(0);
 }
 
-// Iniciar sincronização automática de grupos (após servidor estar pronto)
 async function initializeGroupSync(): Promise<void> {
   try {
     const client = getUazapiClient();
@@ -1116,9 +813,7 @@ async function initializeGroupSync(): Promise<void> {
 
     if (isConnected) {
       logger.info('WhatsApp conectado. Iniciando sincronização automática de grupos...');
-      // Fazer sync inicial
       await client.refreshGroups();
-      // Iniciar sync periódico (a cada 5 minutos)
       client.startGroupSync();
       logger.info('Sincronização de grupos iniciada com sucesso');
     } else {
@@ -1134,15 +829,13 @@ async function initializeGroupSync(): Promise<void> {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-// Iniciar servidor
 app.listen(PORT, () => {
   logger.info(`Servidor rodando em http://localhost:${PORT}`);
   logger.info('Interface web disponível');
 
-  // Iniciar sincronização automática de grupos após startup
   setTimeout(() => {
     initializeGroupSync().catch(err => {
       logger.error('Erro na inicialização do sync de grupos', { error: err });
     });
-  }, 2000); // Aguardar 2 segundos para garantir que tudo está pronto
+  }, 2000);
 });

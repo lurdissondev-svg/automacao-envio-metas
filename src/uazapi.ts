@@ -3,12 +3,12 @@ import type {
   UazapiConfig,
   UazapiConnectionStatus,
   UazapiConnectResponse,
+  UazapiSendTextResponse,
   UazapiSendMediaResponse,
   UazapiGroup,
 } from './types.js';
 
 // ========== GROUP CACHE ==========
-// Cache de grupos com sincronização automática
 
 interface GroupCacheData {
   groups: UazapiGroup[];
@@ -18,29 +18,25 @@ interface GroupCacheData {
 class GroupCache {
   private cache: GroupCacheData | null = null;
   private syncInterval: NodeJS.Timeout | null = null;
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutos
-  private readonly CACHE_MAX_AGE = 10 * 60 * 1000; // 10 minutos - força refresh
-  private readonly SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutos
+  private readonly CACHE_TTL = 5 * 60 * 1000;
+  private readonly CACHE_MAX_AGE = 10 * 60 * 1000;
+  private readonly SYNC_INTERVAL = 5 * 60 * 1000;
 
-  // Verificar se cache é válido
   isValid(): boolean {
     if (!this.cache) return false;
     return Date.now() - this.cache.lastSync < this.CACHE_TTL;
   }
 
-  // Verificar se cache expirou completamente
   isExpired(): boolean {
     if (!this.cache) return true;
     return Date.now() - this.cache.lastSync > this.CACHE_MAX_AGE;
   }
 
-  // Obter grupos do cache
   get(): UazapiGroup[] | null {
     if (!this.cache) return null;
     return this.cache.groups;
   }
 
-  // Atualizar cache
   set(groups: UazapiGroup[]): void {
     this.cache = {
       groups,
@@ -49,18 +45,15 @@ class GroupCache {
     logger.debug('Cache de grupos atualizado', { count: groups.length });
   }
 
-  // Obter timestamp da última sincronização
   getLastSync(): number | null {
     return this.cache?.lastSync || null;
   }
 
-  // Limpar cache
   clear(): void {
     this.cache = null;
     logger.debug('Cache de grupos limpo');
   }
 
-  // Iniciar sincronização periódica
   startPeriodicSync(fetchFn: () => Promise<UazapiGroup[]>): void {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
@@ -84,16 +77,13 @@ class GroupCache {
     });
   }
 
-  // Parar sincronização periódica
   stopPeriodicSync(): void {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
-      logger.debug('Sincronização periódica de grupos parada');
     }
   }
 
-  // Obter estatísticas do cache
   getStats(): { count: number; lastSync: number | null; isValid: boolean; isExpired: boolean } {
     return {
       count: this.cache?.groups.length || 0,
@@ -104,12 +94,10 @@ class GroupCache {
   }
 }
 
-// Instância global do cache de grupos
 const groupCache = new GroupCache();
 
 // ========== UAZAPI CLIENT ==========
 
-// Cliente para UAZAPI (sem prefixo de versão na URL)
 export class UazapiClient {
   private baseUrl: string;
   private token: string;
@@ -117,7 +105,7 @@ export class UazapiClient {
   private adminToken?: string;
 
   constructor(config: UazapiConfig) {
-    this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remover barra final
+    this.baseUrl = config.baseUrl.replace(/\/$/, '');
     this.token = config.token;
     this.instanceId = config.instanceId;
     this.adminToken = config.adminToken;
@@ -128,14 +116,12 @@ export class UazapiClient {
     });
   }
 
-  // Fazer requisição à API v1
   private async request<T>(
     endpoint: string,
     method: 'GET' | 'POST' | 'DELETE' = 'GET',
     body?: Record<string, unknown>,
     queryParams?: Record<string, string>
   ): Promise<T> {
-    // Construir URL com query params
     let url = `${this.baseUrl}${endpoint}`;
     if (queryParams && Object.keys(queryParams).length > 0) {
       const params = new URLSearchParams(queryParams);
@@ -146,7 +132,7 @@ export class UazapiClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'token': this.token,  // UAZAPI usa header 'token' (não Bearer)
+      'token': this.token,
     };
 
     const response = await fetch(url, {
@@ -157,7 +143,6 @@ export class UazapiClient {
 
     const responseText = await response.text();
 
-    // Tentar parsear como JSON mesmo em caso de erro (UAZAPI retorna dados úteis em erros)
     let jsonData: T;
     try {
       jsonData = JSON.parse(responseText) as T;
@@ -173,7 +158,6 @@ export class UazapiClient {
       throw new Error(`Invalid JSON response: ${responseText}`);
     }
 
-    // Para alguns endpoints, erro 409 ainda retorna dados úteis (como QR Code)
     if (!response.ok && response.status !== 409) {
       logger.error('UAZAPI error', {
         status: response.status,
@@ -186,7 +170,6 @@ export class UazapiClient {
     return jsonData;
   }
 
-  // Verificar status da conexão
   async checkConnection(): Promise<UazapiConnectionStatus> {
     const result = await this.request<UazapiConnectionStatus>(
       '/instance/status',
@@ -204,7 +187,6 @@ export class UazapiClient {
     return result;
   }
 
-  // Verificar se está conectado
   async isConnected(): Promise<boolean> {
     try {
       const status = await this.checkConnection();
@@ -217,16 +199,14 @@ export class UazapiClient {
     }
   }
 
-  // Obter QR Code (usa POST /instance/connect)
   async getQRCode(): Promise<{ base64: string; pairingCode?: string }> {
     try {
       const result = await this.request<UazapiConnectResponse>(
         '/instance/connect',
         'POST',
-        { instance: this.instanceId }
+        { instance: this.instanceId, paircode: true }
       );
 
-      // QR Code pode estar em result.qrcode ou result.instance.qrcode
       const qrcode = result.qrcode || result.instance?.qrcode || '';
       const paircode = result.paircode || result.instance?.paircode || '';
 
@@ -247,7 +227,6 @@ export class UazapiClient {
     }
   }
 
-  // Conectar (alias para getQRCode para compatibilidade)
   async connect(): Promise<UazapiConnectResponse> {
     const qr = await this.getQRCode();
     return {
@@ -256,39 +235,62 @@ export class UazapiClient {
     };
   }
 
-  // Formatar número do grupo para JID
   private formatGroupJid(groupId: string): string {
-    // Se já é um JID completo, retornar
     if (groupId.includes('@g.us')) {
       return groupId;
     }
-
-    // Remover caracteres especiais e adicionar sufixo
     const cleaned = groupId.replace(/[^\d]/g, '');
     return `${cleaned}@g.us`;
   }
 
-  // Enviar imagem (usando endpoint /send/media conforme documentação UAZAPI v2)
-  async sendImage(
+  // Enviar texto
+  async sendText(
     groupId: string,
-    imageBuffer: Buffer,
-    caption: string
-  ): Promise<UazapiSendMediaResponse> {
+    message: string
+  ): Promise<UazapiSendTextResponse> {
     const jid = this.formatGroupJid(groupId);
-    const base64Image = `data:image/png;base64,${imageBuffer.toString('base64')}`;
 
-    // Formato conforme documentação: https://docs.uazapi.com/endpoint/post/send~media
     const body = {
       number: jid,
-      type: 'image',
-      file: base64Image,
-      text: caption,  // 'text' é usado como caption na API v2
+      text: message,
     };
 
-    logger.info('Enviando imagem via UAZAPI', {
+    logger.info('Enviando texto via UAZAPI', {
       groupId: jid,
-      captionLength: caption.length,
-      imageSize: imageBuffer.length,
+      messageLength: message.length,
+    });
+
+    const response = await this.request<UazapiSendTextResponse>(
+      '/send/text',
+      'POST',
+      body
+    );
+
+    logger.info('Texto enviado com sucesso via UAZAPI', {
+      messageId: response.messageId || response.id,
+      status: response.status,
+    });
+
+    return response;
+  }
+
+  // Enviar sticker (webp)
+  async sendSticker(
+    groupId: string,
+    stickerBuffer: Buffer
+  ): Promise<UazapiSendMediaResponse> {
+    const jid = this.formatGroupJid(groupId);
+    const base64Sticker = `data:image/webp;base64,${stickerBuffer.toString('base64')}`;
+
+    const body = {
+      number: jid,
+      type: 'sticker',
+      file: base64Sticker,
+    };
+
+    logger.info('Enviando sticker via UAZAPI', {
+      groupId: jid,
+      stickerSize: stickerBuffer.length,
     });
 
     const response = await this.request<UazapiSendMediaResponse>(
@@ -297,29 +299,27 @@ export class UazapiClient {
       body
     );
 
-    logger.info('Imagem enviada com sucesso via UAZAPI', {
+    logger.info('Sticker enviado com sucesso via UAZAPI', {
       messageId: response.messageId || response.id,
-      status: response.status,
     });
 
     return response;
   }
 
-  // Enviar imagem para múltiplos grupos com delay
-  async sendImageToGroups(
+  // Enviar texto para múltiplos grupos com delay
+  async sendTextToGroups(
     groups: string[],
-    imageBuffer: Buffer,
-    caption: string,
+    message: string,
     delayBetweenGroups: number = 5000
-  ): Promise<Map<string, UazapiSendMediaResponse | Error>> {
-    const results = new Map<string, UazapiSendMediaResponse | Error>();
+  ): Promise<Map<string, UazapiSendTextResponse | Error>> {
+    const results = new Map<string, UazapiSendTextResponse | Error>();
 
     for (let i = 0; i < groups.length; i++) {
       const groupId = groups[i];
 
       try {
         logger.info(`Enviando para grupo ${i + 1}/${groups.length}`, { groupId });
-        const response = await this.sendImage(groupId, imageBuffer, caption);
+        const response = await this.sendText(groupId, message);
         results.set(groupId, response);
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
@@ -329,14 +329,11 @@ export class UazapiClient {
         results.set(groupId, err);
       }
 
-      // Aguardar entre envios (exceto no último)
       if (i < groups.length - 1) {
-        logger.debug(`Aguardando ${delayBetweenGroups}ms antes do próximo envio`);
         await new Promise(resolve => setTimeout(resolve, delayBetweenGroups));
       }
     }
 
-    // Log resumo
     const successful = [...results.values()].filter(r => !(r instanceof Error)).length;
     const failed = groups.length - successful;
 
@@ -351,9 +348,7 @@ export class UazapiClient {
 
   // ========== GROUP METHODS WITH CACHE ==========
 
-  // Buscar grupos da API (sem cache)
   private async fetchGroupsFromApi(force: boolean = false): Promise<UazapiGroup[]> {
-    // Usando endpoint /group/list com parâmetro force para atualizar cache do WhatsApp
     const queryParams: Record<string, string> = { instance: this.instanceId };
     if (force) {
       queryParams.force = 'true';
@@ -371,10 +366,8 @@ export class UazapiClient {
     return groups;
   }
 
-  // Listar todos os grupos do WhatsApp (com cache)
   async fetchAllGroups(): Promise<UazapiGroup[]> {
     try {
-      // Se cache válido, retornar do cache
       if (groupCache.isValid()) {
         const cached = groupCache.get();
         if (cached) {
@@ -383,7 +376,6 @@ export class UazapiClient {
         }
       }
 
-      // Se cache expirou completamente ou não existe, buscar da API
       const groups = await this.fetchGroupsFromApi();
       groupCache.set(groups);
       return groups;
@@ -392,7 +384,6 @@ export class UazapiClient {
         error: error instanceof Error ? error.message : error,
       });
 
-      // Se houver erro mas temos cache (mesmo expirado), usar ele
       const cached = groupCache.get();
       if (cached) {
         logger.warn('Usando cache expirado devido a erro na API');
@@ -403,11 +394,8 @@ export class UazapiClient {
     }
   }
 
-  // Forçar refresh da lista de grupos (ignora cache local e força atualização no WhatsApp)
   async refreshGroups(): Promise<{ groups: UazapiGroup[]; lastSync: number }> {
     logger.info('Forçando refresh da lista de grupos (force=true)');
-
-    // Usar force=true para buscar dados atualizados diretamente do WhatsApp
     const groups = await this.fetchGroupsFromApi(true);
     groupCache.set(groups);
 
@@ -417,7 +405,6 @@ export class UazapiClient {
     };
   }
 
-  // Obter grupos com informações de cache
   async getGroupsWithCacheInfo(): Promise<{
     groups: UazapiGroup[];
     lastSync: number | null;
@@ -433,24 +420,20 @@ export class UazapiClient {
     };
   }
 
-  // Iniciar sincronização automática de grupos
   startGroupSync(): void {
     groupCache.startPeriodicSync(() => this.fetchGroupsFromApi());
   }
 
-  // Parar sincronização automática de grupos
   stopGroupSync(): void {
     groupCache.stopPeriodicSync();
   }
 
-  // Obter estatísticas do cache de grupos
   getGroupCacheStats(): { count: number; lastSync: number | null; isValid: boolean; isExpired: boolean } {
     return groupCache.getStats();
   }
 
   // ========== OTHER METHODS ==========
 
-  // Desconectar instância (logout)
   async logout(): Promise<void> {
     try {
       await this.request(
@@ -459,8 +442,6 @@ export class UazapiClient {
         { instance: this.instanceId }
       );
       logger.info('Logout UAZAPI realizado');
-
-      // Limpar cache ao deslogar
       groupCache.clear();
     } catch (error) {
       logger.error('Erro ao fazer logout UAZAPI', {
@@ -470,7 +451,6 @@ export class UazapiClient {
     }
   }
 
-  // Reiniciar instância
   async restart(): Promise<void> {
     try {
       await this.request(
@@ -479,8 +459,6 @@ export class UazapiClient {
         { instance: this.instanceId }
       );
       logger.info('Instância UAZAPI reiniciada');
-
-      // Limpar cache ao reiniciar
       groupCache.clear();
     } catch (error) {
       logger.error('Erro ao reiniciar instância UAZAPI', {
@@ -490,7 +468,6 @@ export class UazapiClient {
     }
   }
 
-  // Deletar instância
   async deleteInstance(): Promise<void> {
     try {
       await this.request(
@@ -578,14 +555,4 @@ export async function deleteInstanceByAdmin(
   }
 
   logger.info('Instância deletada com sucesso', { instanceId });
-}
-
-export async function listInstances(
-  baseUrl: string,
-  adminToken: string
-): Promise<Array<{ id: string; name: string; status: string; token: string }>> {
-  // UAZAPI não tem endpoint oficial de listar todas as instâncias
-  // Retornamos array vazio - a instância atual vem da configuração
-  logger.info('Listando instâncias não suportado pela UAZAPI');
-  return [];
 }
